@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
-import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
+import { cursorPosition } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { TerminalView } from "./TerminalView";
@@ -97,6 +97,22 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
   const [hoverLeaf, setHoverLeaf] = useState<string | null>(null);
   const hoverLeafRef = useRef<string | null>(null);
   hoverLeafRef.current = hoverLeaf;
+  // CSS-screen position of the webview content's top-left, captured from the
+  // dragstart event (its screenX/clientX are reliable; cursorPosition's screen
+  // origin is not, e.g. on a monitor placed above the main one). Then
+  // client = cursorCss - offset.
+  const dragOffsetRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const onDragStart = (event: DragEvent) => {
+      dragOffsetRef.current = {
+        x: event.screenX - event.clientX,
+        y: event.screenY - event.clientY,
+      };
+    };
+    document.addEventListener("dragstart", onDragStart, true);
+    return () => document.removeEventListener("dragstart", onDragStart, true);
+  }, []);
 
   // WKWebView only fires dragstart/dragend for in-webview element drags — the
   // intermediate drag/dragover/drop events are swallowed. So we resolve the drop
@@ -120,31 +136,21 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
   }, []);
 
   // No move events fire mid-drag, so poll the OS cursor position to highlight the
-  // single pane under the cursor. Cursor/window positions are physical (screen)
-  // pixels; convert to CSS client pixels relative to the webview before hit-test.
+  // pane under the cursor. cursorPosition is physical; divide by devicePixelRatio
+  // for CSS-screen px, then subtract the webview's CSS-screen offset for client px.
   useEffect(() => {
     if (!dragging) {
       setHoverLeaf(null);
       return;
     }
     let active = true;
-    const win = getCurrentWindow();
     void (async () => {
-      let originX = 0;
-      let originY = 0;
-      let scale = 1;
-      try {
-        const inner = await win.innerPosition();
-        scale = await win.scaleFactor();
-        originX = inner.x;
-        originY = inner.y;
-      } catch {
-        // fall back to treating cursor coords as client coords
-      }
       while (active) {
         try {
           const cursor = await cursorPosition();
-          const leaf = paneLeafAt((cursor.x - originX) / scale, (cursor.y - originY) / scale);
+          const dpr = window.devicePixelRatio || 1;
+          const offset = dragOffsetRef.current;
+          const leaf = paneLeafAt(cursor.x / dpr - offset.x, cursor.y / dpr - offset.y);
           setHoverLeaf((prev) => (prev === leaf ? prev : leaf));
         } catch {
           // ignore a failed read; retry next tick
