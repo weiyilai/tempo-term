@@ -1,4 +1,5 @@
-import { useRef, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { cursorPosition, getCurrentWindow } from "@tauri-apps/api/window";
 import { useTranslation } from "react-i18next";
 import { X } from "lucide-react";
 import { TerminalView } from "./TerminalView";
@@ -14,13 +15,26 @@ import { EditorTabContent } from "@/modules/editor/EditorTabContent";
 import { NoteTabContent } from "@/modules/notes/NoteTabContent";
 import { PreviewTabContent } from "@/modules/preview/PreviewTabContent";
 import { GitGraphTabContent } from "@/modules/git-graph/GitGraphTabContent";
-import { EntryDropOverlay, useEntryDragging } from "@/components/EntryDropOverlay";
-import { fileUrl, shellQuotePath, type DraggedEntry } from "@/modules/explorer/lib/dragEntry";
+import { dropOverlayClassName, useEntryDragging } from "@/components/EntryDropOverlay";
+import {
+  fileUrl,
+  getDraggedEntry,
+  shellQuotePath,
+  type DraggedEntry,
+} from "@/modules/explorer/lib/dragEntry";
 import { insertLinkIntoNote } from "@/modules/notes/lib/noteBus";
 import { useTabsStore, type Tab } from "@/stores/tabsStore";
 
 const MIN_FRACTION = 0.1;
 const MAX_FRACTION = 0.9;
+
+/** The leaf id of the pane under the given client-space point, if any. */
+function paneLeafAt(clientX: number, clientY: number): string | null {
+  return (
+    document.elementFromPoint(clientX, clientY)?.closest<HTMLElement>("[data-pane-leaf]")?.dataset
+      .paneLeaf ?? null
+  );
+}
 
 /**
  * Renders one tab as a recursive split of panes. Each leaf shows a terminal,
@@ -74,6 +88,75 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
     }
   }
 
+  const panesRef = useRef(panes);
+  panesRef.current = panes;
+  const handleDropRef = useRef(handleDrop);
+  handleDropRef.current = handleDrop;
+  const canDropRef = useRef(canDrop);
+  canDropRef.current = canDrop;
+  const [hoverLeaf, setHoverLeaf] = useState<string | null>(null);
+  const hoverLeafRef = useRef<string | null>(null);
+  hoverLeafRef.current = hoverLeaf;
+
+  // WKWebView only fires dragstart/dragend for in-webview element drags — the
+  // intermediate drag/dragover/drop events are swallowed. So we resolve the drop
+  // from the dragend cursor position (capture phase, so we read the dragged
+  // entry before FileTree's own onDragEnd clears it in the bubble phase).
+  useEffect(() => {
+    const onDragEnd = (event: DragEvent) => {
+      const entry = getDraggedEntry();
+      const leaf = paneLeafAt(event.clientX, event.clientY) ?? hoverLeafRef.current;
+      setHoverLeaf(null);
+      if (!entry || !leaf) {
+        return;
+      }
+      const pane = panesRef.current.find((p) => p.id === leaf);
+      if (pane && canDropRef.current(pane.content, entry)) {
+        handleDropRef.current(pane.content, leaf, entry);
+      }
+    };
+    document.addEventListener("dragend", onDragEnd, true);
+    return () => document.removeEventListener("dragend", onDragEnd, true);
+  }, []);
+
+  // No move events fire mid-drag, so poll the OS cursor position to highlight the
+  // single pane under the cursor. Cursor/window positions are physical (screen)
+  // pixels; convert to CSS client pixels relative to the webview before hit-test.
+  useEffect(() => {
+    if (!dragging) {
+      setHoverLeaf(null);
+      return;
+    }
+    let active = true;
+    const win = getCurrentWindow();
+    void (async () => {
+      let originX = 0;
+      let originY = 0;
+      let scale = 1;
+      try {
+        const inner = await win.innerPosition();
+        scale = await win.scaleFactor();
+        originX = inner.x;
+        originY = inner.y;
+      } catch {
+        // fall back to treating cursor coords as client coords
+      }
+      while (active) {
+        try {
+          const cursor = await cursorPosition();
+          const leaf = paneLeafAt((cursor.x - originX) / scale, (cursor.y - originY) / scale);
+          setHoverLeaf((prev) => (prev === leaf ? prev : leaf));
+        } catch {
+          // ignore a failed read; retry next tick
+        }
+        await new Promise((resolve) => setTimeout(resolve, 60));
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [dragging]);
+
   function startDrag(e: ReactMouseEvent, splitter: SplitterInfo) {
     e.preventDefault();
     e.stopPropagation();
@@ -118,9 +201,12 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
       <div ref={paneAreaRef} className="relative min-h-0 flex-1">
         {panes.map((pane) => {
           const active = pane.id === tab.activeLeafId;
+          const draggedEntry = dragging ? getDraggedEntry() : null;
+          const dropOk = draggedEntry ? canDrop(pane.content, draggedEntry) : false;
           return (
             <div
               key={pane.id}
+              data-pane-leaf={pane.id}
               onMouseDown={() => setActiveLeaf(tab.id, pane.id)}
               style={{
                 position: "absolute",
@@ -168,13 +254,12 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
                 />
               )}
 
-              {/* Drop overlay covers the pane (incl. the preview iframe) so a
-                  dragged explorer entry can land on any content type. */}
-              {dragging && (
-                <EntryDropOverlay
-                  accept={(entry) => canDrop(pane.content, entry)}
-                  onDropEntry={(entry) => handleDrop(pane.content, pane.id, entry)}
-                />
+              {/* Highlight only the pane under the cursor while dragging an
+                  explorer entry. The drop itself is handled by the document-level
+                  drag/dragend listeners above, since WKWebView swallows the
+                  webview's own HTML5 drop events when dragDropEnabled is on. */}
+              {dragging && pane.id === hoverLeaf && (
+                <div className={dropOverlayClassName(dropOk)} />
               )}
             </div>
           );
