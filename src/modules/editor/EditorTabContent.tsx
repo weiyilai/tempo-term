@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Columns2, Eye, SquarePen, WrapText, type LucideIcon } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView as CMView } from "@codemirror/view";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { editorSyntaxTheme } from "@/themes/editorTheme";
 import { languageExtension } from "./lib/language";
 import { useEditorStore } from "./store/editorStore";
 import { fsReadFile, fsWriteFile } from "@/modules/explorer/lib/fsBridge";
@@ -79,7 +79,7 @@ export function EditorTabContent({ path }: { path: string }) {
   const editorPane = (
     <CodeMirror
       value={content}
-      theme={isDark ? oneDark : "light"}
+      theme={editorSyntaxTheme(isDark)}
       extensions={extensions}
       onChange={(value) => setContent(path, value)}
       height="100%"
