@@ -12,9 +12,11 @@ interface SettingsState {
   themeId: string;
   /** Inner padding (px) between the terminal content and its pane edges. */
   terminalPadding: number;
+  wordWrap: boolean;
   setLanguage: (language: SupportedLanguage) => void;
   setThemeId: (themeId: string) => void;
   setTerminalPadding: (padding: number) => void;
+  toggleWordWrap: () => void;
 }
 
 export const SETTINGS_STORAGE_KEY = "tempoterm-settings";
@@ -32,9 +34,11 @@ export const useSettingsStore = create<SettingsState>()(
       language: DEFAULT_LANGUAGE,
       themeId: DEFAULT_THEME_ID,
       terminalPadding: DEFAULT_TERMINAL_PADDING,
+      wordWrap: false,
       setLanguage: (language) => set({ language }),
       setThemeId: (themeId) => set({ themeId }),
       setTerminalPadding: (padding) => set({ terminalPadding: clampPadding(padding) }),
+      toggleWordWrap: () => set((s) => ({ wordWrap: !s.wordWrap })),
     }),
     {
       name: SETTINGS_STORAGE_KEY,

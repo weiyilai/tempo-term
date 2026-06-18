@@ -16,6 +16,7 @@ describe("settingsStore", () => {
       language: initialState.language,
       themeId: initialState.themeId,
       terminalPadding: initialState.terminalPadding,
+      wordWrap: initialState.wordWrap,
     });
   });
 
@@ -47,5 +48,13 @@ describe("settingsStore", () => {
     const persisted = localStorage.getItem("tempoterm-settings");
     expect(persisted).toBeTruthy();
     expect(persisted).toContain("zh-Hant");
+  });
+
+  it("defaults word wrap off and toggles it", () => {
+    expect(useSettingsStore.getState().wordWrap).toBe(false);
+    useSettingsStore.getState().toggleWordWrap();
+    expect(useSettingsStore.getState().wordWrap).toBe(true);
+    useSettingsStore.getState().toggleWordWrap();
+    expect(useSettingsStore.getState().wordWrap).toBe(false);
   });
 });
