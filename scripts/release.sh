@@ -57,22 +57,17 @@ echo "→ Stapling notarization ticket to .dmg..."
 xcrun stapler staple "$DMG_PATH"
 
 # 4. Generate latest.json (the manifest the in-app updater polls).
+# The in-app "更新內容" prompt reads its body from this manifest's `notes` field,
+# NOT from the GitHub release body, so the changelog has to be embedded here too.
 PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 SIGNATURE=$(cat "$SIG_PATH")
 DOWNLOAD_URL="https://github.com/mukiwu/tempo-term/releases/download/${TAG}/TempoTerm.app.tar.gz"
 
-cat > /tmp/latest.json <<EOF
-{
-  "version": "${VERSION}",
-  "pub_date": "${PUB_DATE}",
-  "platforms": {
-    "darwin-aarch64": {
-      "signature": "${SIGNATURE}",
-      "url": "${DOWNLOAD_URL}"
-    }
-  }
-}
-EOF
+MANIFEST_VERSION="$VERSION" \
+MANIFEST_PUB_DATE="$PUB_DATE" \
+MANIFEST_SIGNATURE="$SIGNATURE" \
+MANIFEST_URL="$DOWNLOAD_URL" \
+  node scripts/buildManifest.mjs CHANGELOG-NEXT.md /tmp/latest.json
 
 # 5. Create the GitHub release and upload assets.
 echo "→ Creating GitHub release..."
