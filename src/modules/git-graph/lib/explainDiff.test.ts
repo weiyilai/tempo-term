@@ -24,6 +24,7 @@ describe("buildExplainPrompt", () => {
     const out = buildExplainPrompt(big, "f.ts", "en", 10);
     expect(out).toContain("[truncated]");
     expect(out).not.toContain("x".repeat(50));
+    expect(out).toContain("x".repeat(10));
   });
 
   it("does not truncate a short diff", () => {
