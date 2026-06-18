@@ -19,7 +19,9 @@ import { common, createLowlight } from "lowlight";
 import { exitCode } from "@tiptap/pm/commands";
 import { Check, Copy, SquareTerminal } from "lucide-react";
 import { useMemo, useState } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { runCommandInTerminal } from "@/modules/terminal/lib/terminalBus";
+import { isWebUrl } from "@/lib/url";
 import { createSlashCommand } from "./slashCommand";
 import { registerNoteInserter, unregisterNoteInserter } from "./lib/noteBus";
 import { Combobox } from "@/components/Combobox";
@@ -138,7 +140,10 @@ export function NoteEditor({ content, onChange, noteId }: NoteEditorProps) {
       StarterKit.configure({ codeBlock: false }),
       CodeBlock,
       slashCommand,
-      Link.configure({ openOnClick: false }),
+      Link.configure({
+        openOnClick: false,
+        HTMLAttributes: { "data-link-hint": t("linkHint") },
+      }),
       TaskList,
       TaskItem.configure({ nested: true }),
       Placeholder.configure({ placeholder: t("contentPlaceholder") }),
@@ -150,6 +155,22 @@ export function NoteEditor({ content, onChange, noteId }: NoteEditorProps) {
     content,
     editorProps: {
       attributes: { class: "note-md tiptap focus:outline-none" },
+      // Cmd/Ctrl+click a link opens it in the system browser; a plain click
+      // still places the cursor for editing. preventDefault stops the webview
+      // from navigating to the URL itself on a plain click.
+      handleClick(_view, _pos, event) {
+        const target = event.target as HTMLElement | null;
+        const href = target?.closest("a")?.getAttribute("href");
+        if (!href || !isWebUrl(href)) {
+          return false;
+        }
+        event.preventDefault();
+        if (event.metaKey || event.ctrlKey) {
+          void openUrl(href);
+          return true;
+        }
+        return false;
+      },
     },
     onUpdate: ({ editor }) => {
       if (timer.current) {
