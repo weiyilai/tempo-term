@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { uid } from "@/lib/id";
 import {
+  computeLayout,
   firstLeafId,
   leaf,
   paneOf,
@@ -26,7 +27,7 @@ export interface Space {
   name: string;
 }
 
-export type TabKind = "terminal" | "editor" | "note" | "preview" | "git-graph";
+export type TabKind = "terminal" | "editor" | "note" | "preview" | "git-graph" | "launcher";
 
 /**
  * A single tab. `kind` is only the tab's creation type, used for the tab-bar
@@ -57,6 +58,8 @@ interface TabsState {
   renameSpace: (id: string, name: string) => void;
   deleteSpace: (id: string) => void;
   newTerminalTab: (cwd?: string) => string;
+  /** A blank "new tab" showing the launcher; reused if one already exists. */
+  openLauncherTab: () => string;
   openEditorTab: (path: string) => string;
   openNoteTab: (noteId: string, title: string) => string;
   openPreviewTab: (url: string) => string;
@@ -65,6 +68,11 @@ interface TabsState {
   /** Update a terminal tab's title to follow its cwd, unless the user renamed it. */
   syncTabTitleToCwd: (id: string, cwd: string) => void;
   closeTab: (id: string) => void;
+  /**
+   * Close the next pane of the active tab in reverse reading order (bottom-most,
+   * then right-most), falling back to closing the whole tab when one pane is left.
+   */
+  closePaneOrTab: () => void;
   setActive: (id: string) => void;
   splitActivePane: (direction: SplitDirection) => void;
   setActiveLeaf: (tabId: string, leafId: string) => void;
@@ -253,6 +261,27 @@ export const useTabsStore = create<TabsState>()(
     return id;
   },
 
+  openLauncherTab: () => {
+    const spaceId = get().ensureSpace();
+    const existing = get().tabs.find((t) => t.kind === "launcher" && t.spaceId === spaceId);
+    if (existing) {
+      set({ activeId: existing.id });
+      return existing.id;
+    }
+    const id = nextTabId();
+    const paneId = nextPaneId();
+    const tab: Tab = {
+      id,
+      spaceId,
+      kind: "launcher",
+      title: "New Tab",
+      paneTree: leaf(paneId, { kind: "terminal" }),
+      activeLeafId: paneId,
+    };
+    set((state) => ({ tabs: [...state.tabs, tab], activeId: id }));
+    return id;
+  },
+
   openEditorTab: (path) => {
     const spaceId = get().ensureSpace();
     const existing = get().tabs.find(
@@ -384,6 +413,28 @@ export const useTabsStore = create<TabsState>()(
       return { tabs, activeId };
     }),
 
+  closePaneOrTab: () => {
+    const state = get();
+    const tab = state.tabs.find((t) => t.id === state.activeId);
+    if (!tab) {
+      return;
+    }
+    const panes = computeLayout(tab.paneTree);
+    if (panes.length <= 1) {
+      get().closeTab(tab.id);
+      return;
+    }
+    // Bottom-most wins; ties broken by right-most — so a split peels away from
+    // the bottom-right corner, the reverse of how panes are read.
+    const target = panes.reduce((a, b) => {
+      if (b.rect.top !== a.rect.top) {
+        return b.rect.top > a.rect.top ? b : a;
+      }
+      return b.rect.left > a.rect.left ? b : a;
+    });
+    get().closePane(tab.id, target.id);
+  },
+
   setActive: (id) =>
     set((state) => {
       const tab = state.tabs.find((t) => t.id === id);
@@ -399,7 +450,10 @@ export const useTabsStore = create<TabsState>()(
         const newId = nextPaneId();
         return {
           ...tab,
-          paneTree: splitLeaf(tab.paneTree, tab.activeLeafId, direction, newId),
+          // A fresh split shows the launcher so the user picks what goes in it.
+          paneTree: splitLeaf(tab.paneTree, tab.activeLeafId, direction, newId, {
+            kind: "launcher",
+          }),
           activeLeafId: newId,
         };
       }),

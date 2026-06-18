@@ -41,7 +41,13 @@
     "toggleTerminal": "Toggle terminal",
     "toggleSidebar": "Toggle sidebar",
     "terminal": "Terminal",
+    "note": "Note",
     "newTerminal": "New terminal",
+    "launcherHint": "Choose what to open",
+    "launcherGroup": {
+      "workspace": "Workspace",
+      "tools": "Tools"
+    },
     "splitRight": "Split right",
     "splitDown": "Split down",
     "closePane": "Close pane",

@@ -41,7 +41,13 @@
     "toggleTerminal": "切換終端機",
     "toggleSidebar": "切換側邊欄",
     "terminal": "終端機",
+    "note": "筆記",
     "newTerminal": "新增終端機",
+    "launcherHint": "選擇要開啟的內容",
+    "launcherGroup": {
+      "workspace": "工作區",
+      "tools": "工具"
+    },
     "splitRight": "向右分割",
     "splitDown": "向下分割",
     "closePane": "關閉面板",

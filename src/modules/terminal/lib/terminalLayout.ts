@@ -7,13 +7,17 @@
 
 export type SplitDirection = "row" | "col";
 
-/** What a leaf pane shows: a terminal, an open file, a note, a preview, or the git graph. */
+/**
+ * What a leaf pane shows: a terminal, an open file, a note, a preview, the git
+ * graph, or the launcher (a freshly split pane that hasn't been chosen yet).
+ */
 export type PaneContent =
   | { kind: "terminal" }
   | { kind: "editor"; path: string }
   | { kind: "note"; noteId: string }
   | { kind: "preview"; url: string }
-  | { kind: "git-graph" };
+  | { kind: "git-graph" }
+  | { kind: "launcher" };
 
 export const TERMINAL_PANE: PaneContent = { kind: "terminal" };
 
@@ -216,6 +220,22 @@ export function computeLayout(node: LayoutNode, rect: Rect = FULL): PaneRect[] {
       height: rect.height - h0,
     }),
   ];
+}
+
+/**
+ * The id of the pane covering a point given in layout percentages (0–100), or
+ * null if the point is outside every pane. Lets a drop resolve its target from
+ * coordinates alone, without elementFromPoint (unreliable mid-drag in WKWebView).
+ */
+export function paneIdAt(panes: PaneRect[], xPct: number, yPct: number): string | null {
+  const pane = panes.find(
+    (p) =>
+      xPct >= p.rect.left &&
+      xPct <= p.rect.left + p.rect.width &&
+      yPct >= p.rect.top &&
+      yPct <= p.rect.top + p.rect.height,
+  );
+  return pane?.id ?? null;
 }
 
 export interface SplitterInfo {

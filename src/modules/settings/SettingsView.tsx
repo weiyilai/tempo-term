@@ -14,9 +14,9 @@ type SectionId = "appearance" | "ai" | "shortcuts" | "about";
 const SECTIONS: SectionId[] = ["appearance", "ai", "shortcuts", "about"];
 
 /**
- * A read-only code snippet painted in a theme's own colours, so the syntax
- * palette can be previewed before the theme is applied. Hovering a theme swatch
- * shows that theme here; otherwise it shows the active one.
+ * A read-only code snippet painted in the active theme's own colours, so its
+ * syntax palette stays visible. Clicking a theme swatch below applies it and
+ * refreshes this preview.
  */
 function ThemePreview({ theme }: { theme: AppTheme }) {
   const c = theme.colors;
@@ -60,9 +60,8 @@ function AppearanceSection() {
   const setLanguage = useSettingsStore((s) => s.setLanguage);
   const themeId = useSettingsStore((s) => s.themeId);
   const setThemeId = useSettingsStore((s) => s.setThemeId);
-  const [hoveredTheme, setHoveredTheme] = useState<string | null>(null);
 
-  const previewTheme = getTheme(hoveredTheme ?? themeId);
+  const previewTheme = getTheme(themeId);
   const themeGroups = [
     { key: "light", themes: THEMES.filter((theme) => theme.appearance === "light") },
     { key: "dark", themes: THEMES.filter((theme) => theme.appearance === "dark") },
@@ -114,8 +113,6 @@ function AppearanceSection() {
                     key={theme.id}
                     type="button"
                     aria-pressed={active}
-                    onMouseEnter={() => setHoveredTheme(theme.id)}
-                    onMouseLeave={() => setHoveredTheme(null)}
                     onClick={() => setThemeId(theme.id)}
                     className={`flex items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors ${
                       active

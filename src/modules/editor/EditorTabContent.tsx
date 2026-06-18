@@ -3,14 +3,15 @@ import { useTranslation } from "react-i18next";
 import { Columns2, Eye, SquarePen, WrapText, type LucideIcon } from "lucide-react";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView as CMView } from "@codemirror/view";
-import { oneDark } from "@codemirror/theme-one-dark";
+import { editorSyntaxTheme } from "@/themes/editorTheme";
 import { languageExtension } from "./lib/language";
 import { useEditorStore } from "./store/editorStore";
 import { fsReadFile, fsWriteFile } from "@/modules/explorer/lib/fsBridge";
+import { basename } from "@/modules/explorer/lib/paths";
 import { MarkdownView } from "@/components/MarkdownView";
+import { Tooltip } from "@/components/Tooltip";
 import { selectTerminalFontFamily, useFontStore } from "@/stores/fontStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { getTheme } from "@/themes/themes";
 
 type EditorMode = "edit" | "split" | "preview";
 
@@ -35,7 +36,7 @@ export function EditorTabContent({ path }: { path: string }) {
 
   const fontFamily = useFontStore(selectTerminalFontFamily);
   const fontSize = useFontStore((s) => s.fontSize);
-  const isDark = useSettingsStore((s) => getTheme(s.themeId).appearance === "dark");
+  const themeId = useSettingsStore((s) => s.themeId);
   const wordWrap = useSettingsStore((s) => s.wordWrap);
   const toggleWordWrap = useSettingsStore((s) => s.toggleWordWrap);
 
@@ -77,7 +78,7 @@ export function EditorTabContent({ path }: { path: string }) {
   const editorPane = (
     <CodeMirror
       value={content}
-      theme={isDark ? oneDark : "light"}
+      theme={editorSyntaxTheme(themeId)}
       extensions={extensions}
       onChange={(value) => setContent(path, value)}
       height="100%"
@@ -100,39 +101,45 @@ export function EditorTabContent({ path }: { path: string }) {
       }}
     >
       {/* pr-8 leaves room for the pane's close button (absolute, top-right). */}
-      <div className="flex h-7 shrink-0 items-center justify-end gap-0.5 border-b border-border pl-2 pr-8">
-        <button
-          type="button"
-          title={t("wrap")}
-          aria-label={t("wrap")}
-          aria-pressed={wordWrap}
-          onClick={toggleWordWrap}
-          className={`rounded p-1 ${
-            wordWrap ? "bg-bg-elevated text-fg" : "text-fg-muted hover:bg-bg-elevated hover:text-fg"
-          }`}
-        >
-          <WrapText size={14} />
-        </button>
+      <div className="flex h-7 shrink-0 items-center justify-between gap-2 border-b border-border pl-2 pr-8">
+        <span className="min-w-0 truncate text-xs text-fg-muted" title={path}>
+          {basename(path)}
+        </span>
+        <div className="flex shrink-0 items-center gap-0.5">
+        <Tooltip label={t("wrap")}>
+          <button
+            type="button"
+            aria-label={t("wrap")}
+            aria-pressed={wordWrap}
+            onClick={toggleWordWrap}
+            className={`rounded p-1 ${
+              wordWrap ? "bg-bg-elevated text-fg" : "text-fg-muted hover:bg-bg-elevated hover:text-fg"
+            }`}
+          >
+            <WrapText size={14} />
+          </button>
+        </Tooltip>
         {isMarkdown &&
           MODES.map((m) => {
             const Icon = m.icon;
             const active = mode === m.key;
             return (
-              <button
-                key={m.key}
-                type="button"
-                title={t(`mode.${m.key}`)}
-                aria-label={t(`mode.${m.key}`)}
-                aria-pressed={active}
-                onClick={() => setMode(m.key)}
-                className={`rounded p-1 ${
-                  active ? "bg-bg-elevated text-fg" : "text-fg-muted hover:bg-bg-elevated hover:text-fg"
-                }`}
-              >
-                <Icon size={14} />
-              </button>
+              <Tooltip key={m.key} label={t(`mode.${m.key}`)}>
+                <button
+                  type="button"
+                  aria-label={t(`mode.${m.key}`)}
+                  aria-pressed={active}
+                  onClick={() => setMode(m.key)}
+                  className={`rounded p-1 ${
+                    active ? "bg-bg-elevated text-fg" : "text-fg-muted hover:bg-bg-elevated hover:text-fg"
+                  }`}
+                >
+                  <Icon size={14} />
+                </button>
+              </Tooltip>
             );
           })}
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">

@@ -84,7 +84,8 @@
       "editor": "Editor",
       "notes": "Notes"
     },
-    "newTab": "New terminal tab",
+    "newTab": "New tab",
+    "newTerminalTab": "New terminal tab",
     "closeTab": "Close current tab",
     "findFiles": "Find files",
     "toggleSidebar": "Toggle sidebar",

@@ -54,15 +54,17 @@ function App() {
       const key = e.key.toLowerCase();
       if (key === "t") {
         e.preventDefault();
-        useTabsStore
-          .getState()
-          .newTerminalTab(useWorkspaceStore.getState().rootPath ?? undefined);
+        // ⇧⌘T opens a terminal straight away; ⌘T opens the launcher.
+        if (e.shiftKey) {
+          useTabsStore
+            .getState()
+            .newTerminalTab(useWorkspaceStore.getState().rootPath ?? undefined);
+        } else {
+          useTabsStore.getState().openLauncherTab();
+        }
       } else if (key === "w") {
         e.preventDefault();
-        const activeId = useTabsStore.getState().activeId;
-        if (activeId) {
-          useTabsStore.getState().closeTab(activeId);
-        }
+        useTabsStore.getState().closePaneOrTab();
       } else if (key === "p") {
         e.preventDefault();
         useUiStore.getState().openFileFinder();

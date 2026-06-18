@@ -1,12 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   FileCode,
-  FilePlus,
   FileText,
-  FolderOpen,
   GitBranch,
   Globe,
+  LayoutGrid,
   PanelLeft,
   Plus,
   SquareTerminal,
@@ -16,12 +15,8 @@ import {
 import { useTabsStore, type Tab } from "@/stores/tabsStore";
 import { computeLayout } from "@/modules/terminal/lib/terminalLayout";
 import { useEditorStore } from "@/modules/editor/store/editorStore";
-import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useUiStore } from "@/stores/uiStore";
-import { pickFile, pickFolder } from "@/lib/dialog";
 import { SpaceDropdown } from "./SpaceDropdown";
-
-const DEFAULT_PREVIEW_URL = "http://localhost:3000";
 
 function tabIcon(kind: Tab["kind"]): LucideIcon {
   switch (kind) {
@@ -35,6 +30,8 @@ function tabIcon(kind: Tab["kind"]): LucideIcon {
       return Globe;
     case "git-graph":
       return GitBranch;
+    case "launcher":
+      return LayoutGrid;
   }
 }
 
@@ -125,55 +122,9 @@ export function TabBar() {
   const tabs = useTabsStore((s) => s.tabs);
   const activeSpaceId = useTabsStore((s) => s.activeSpaceId);
   const visibleTabs = tabs.filter((tab) => tab.spaceId === activeSpaceId);
-  const newTerminalTab = useTabsStore((s) => s.newTerminalTab);
-  const openEditorTab = useTabsStore((s) => s.openEditorTab);
-  const openPreviewTab = useTabsStore((s) => s.openPreviewTab);
-  const setRoot = useWorkspaceStore((s) => s.setRoot);
-  const selectSidebar = useUiStore((s) => s.selectSidebar);
+  const openLauncherTab = useTabsStore((s) => s.openLauncherTab);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const sidebarVisible = useUiStore((s) => s.sidebarVisible);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  function addTerminal() {
-    setMenuOpen(false);
-    newTerminalTab(useWorkspaceStore.getState().rootPath ?? undefined);
-  }
-
-  function addPreview() {
-    setMenuOpen(false);
-    openPreviewTab(DEFAULT_PREVIEW_URL);
-  }
-
-  async function openFolder() {
-    setMenuOpen(false);
-    const folder = await pickFolder();
-    if (folder) {
-      setRoot(folder);
-      selectSidebar("explorer");
-    }
-  }
-
-  useEffect(() => {
-    if (!menuOpen) {
-      return;
-    }
-    const onDown = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpen(false);
-      }
-    };
-    window.addEventListener("mousedown", onDown);
-    return () => window.removeEventListener("mousedown", onDown);
-  }, [menuOpen]);
-
-  async function openFile() {
-    setMenuOpen(false);
-    const file = await pickFile();
-    if (file) {
-      openEditorTab(file);
-    }
-  }
 
   return (
     <header
@@ -203,54 +154,15 @@ export function TabBar() {
         ))}
       </div>
 
-      <div ref={menuRef} className="relative">
-        <button
-          type="button"
-          aria-label={t("workspace.newTerminal")}
-          onClick={() => setMenuOpen((v) => !v)}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-bg-elevated hover:text-fg"
-        >
-          <Plus size={16} />
-        </button>
-        {menuOpen && (
-          <div className="absolute right-0 top-8 z-50 w-48 overflow-hidden rounded-lg border border-border-strong bg-bg-elevated py-1 shadow-xl">
-            <button
-              type="button"
-              onClick={addTerminal}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-fg-muted hover:bg-bg hover:text-fg"
-            >
-              <SquareTerminal size={15} />
-              <span className="flex-1">{t("workspace.terminal")}</span>
-              <kbd className="text-[10px] text-fg-subtle">⌘T</kbd>
-            </button>
-            <button
-              type="button"
-              onClick={() => void openFolder()}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-fg-muted hover:bg-bg hover:text-fg"
-            >
-              <FolderOpen size={15} />
-              <span className="flex-1">{t("workspace.openFolder")}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => void openFile()}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-fg-muted hover:bg-bg hover:text-fg"
-            >
-              <FilePlus size={15} />
-              <span className="flex-1">{t("workspace.openFile")}</span>
-            </button>
-            <div className="my-1 border-t border-border" />
-            <button
-              type="button"
-              onClick={addPreview}
-              className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-fg-muted hover:bg-bg hover:text-fg"
-            >
-              <Globe size={15} />
-              <span className="flex-1">{t("preview:title")}</span>
-            </button>
-          </div>
-        )}
-      </div>
+      <button
+        type="button"
+        aria-label={t("workspace.addTab")}
+        title={t("workspace.addTab")}
+        onClick={() => openLauncherTab()}
+        className="flex h-7 w-7 items-center justify-center rounded-md text-fg-muted hover:bg-bg-elevated hover:text-fg"
+      >
+        <Plus size={16} />
+      </button>
     </header>
   );
 }

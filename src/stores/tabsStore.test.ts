@@ -64,6 +64,14 @@ describe("tabsStore", () => {
     expect(leafIds(activeTab().paneTree)).toHaveLength(2);
   });
 
+  it("splits into a launcher pane so the user can choose its content", () => {
+    useTabsStore.getState().newTerminalTab();
+    useTabsStore.getState().splitActivePane("row");
+    const panes = computeLayout(activeTab().paneTree);
+    const added = panes.find((p) => p.id === activeTab().activeLeafId);
+    expect(added?.content).toEqual({ kind: "launcher" });
+  });
+
   it("splits the active editor tab's pane", () => {
     useTabsStore.getState().openEditorTab("/a/b.ts");
     useTabsStore.getState().splitActivePane("row");
@@ -226,6 +234,36 @@ describe("tabsStore", () => {
     expect(useTabsStore.getState().spaces.find((s) => s.id === second)).toBeUndefined();
     expect(useTabsStore.getState().tabs.every((t) => t.spaceId !== second)).toBe(true);
     expect(useTabsStore.getState().activeSpaceId).toBe(first);
+  });
+
+  it("opens a launcher tab and activates it", () => {
+    const id = useTabsStore.getState().openLauncherTab();
+    expect(useTabsStore.getState().activeId).toBe(id);
+    expect(activeTab().kind).toBe("launcher");
+  });
+
+  it("reuses an existing launcher tab in the same space", () => {
+    const first = useTabsStore.getState().openLauncherTab();
+    useTabsStore.getState().newTerminalTab();
+    const again = useTabsStore.getState().openLauncherTab();
+    expect(again).toBe(first);
+    expect(useTabsStore.getState().tabs.filter((t) => t.kind === "launcher")).toHaveLength(1);
+  });
+
+  it("closes the right/bottom-most pane first, keeping the tab", () => {
+    useTabsStore.getState().newTerminalTab();
+    // The original pane is the terminal (left); the split adds a launcher (right).
+    useTabsStore.getState().splitActivePane("row");
+    useTabsStore.getState().closePaneOrTab();
+    const panes = computeLayout(activeTab().paneTree);
+    expect(panes).toHaveLength(1);
+    expect(panes[0].content).toEqual({ kind: "terminal" });
+  });
+
+  it("closes the whole tab once a single pane remains", () => {
+    const id = useTabsStore.getState().newTerminalTab();
+    useTabsStore.getState().closePaneOrTab();
+    expect(useTabsStore.getState().tabs.find((t) => t.id === id)).toBeUndefined();
   });
 });
 
