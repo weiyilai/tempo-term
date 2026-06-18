@@ -22,6 +22,14 @@
     "matches": "{{count}} matches",
     "head": "HEAD"
   },
+  "details": {
+    "author": "Author",
+    "date": "Date",
+    "changedFiles": "Changed Files",
+    "noChanges": "This commit has no changes to show",
+    "noFileSelected": "Select a file to see its diff",
+    "close": "Close"
+  },
   "menu": {
     "createBranchHere": "Create branch here…",
     "createTagHere": "Create tag here…",

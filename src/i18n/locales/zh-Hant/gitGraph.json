@@ -22,6 +22,14 @@
     "matches": "{{count}} 筆符合",
     "head": "HEAD"
   },
+  "details": {
+    "author": "作者",
+    "date": "日期",
+    "changedFiles": "變更檔案",
+    "noChanges": "此提交無變更可顯示",
+    "noFileSelected": "選一個檔案看差異",
+    "close": "關閉"
+  },
   "menu": {
     "createBranchHere": "在這裡建立分支…",
     "createTagHere": "在這裡建立標籤…",
