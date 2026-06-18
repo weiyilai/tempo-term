@@ -12,7 +12,6 @@ import { MarkdownView } from "@/components/MarkdownView";
 import { Tooltip } from "@/components/Tooltip";
 import { selectTerminalFontFamily, useFontStore } from "@/stores/fontStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { getTheme } from "@/themes/themes";
 
 type EditorMode = "edit" | "split" | "preview";
 
@@ -37,7 +36,7 @@ export function EditorTabContent({ path }: { path: string }) {
 
   const fontFamily = useFontStore(selectTerminalFontFamily);
   const fontSize = useFontStore((s) => s.fontSize);
-  const isDark = useSettingsStore((s) => getTheme(s.themeId).appearance === "dark");
+  const themeId = useSettingsStore((s) => s.themeId);
   const wordWrap = useSettingsStore((s) => s.wordWrap);
   const toggleWordWrap = useSettingsStore((s) => s.toggleWordWrap);
 
@@ -79,7 +78,7 @@ export function EditorTabContent({ path }: { path: string }) {
   const editorPane = (
     <CodeMirror
       value={content}
-      theme={editorSyntaxTheme(isDark)}
+      theme={editorSyntaxTheme(themeId)}
       extensions={extensions}
       onChange={(value) => setContent(path, value)}
       height="100%"
