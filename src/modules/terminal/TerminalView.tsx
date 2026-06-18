@@ -382,11 +382,14 @@ export function TerminalView({
         setConnecting(false);
       })
       .catch((error: unknown) => {
+        // If the pane unmounted before the spawn rejected, the terminal is
+        // already disposed; writing to it would throw.
+        if (disposed) {
+          return;
+        }
         const message = error instanceof Error ? error.message : String(error);
         term.write(`\r\n\x1b[31mFailed to open shell: ${message}\x1b[0m\r\n`);
-        if (!disposed) {
-          setConnecting(false);
-        }
+        setConnecting(false);
       });
 
     const observer = new ResizeObserver(() => {

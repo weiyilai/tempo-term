@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { PaneTabContent } from "@/modules/terminal/PaneTabContent";
 import { LauncherPanel } from "@/components/LauncherPanel";
 import { useTabsStore } from "@/stores/tabsStore";
@@ -17,15 +17,14 @@ export function TabsArea() {
   const activeId = useTabsStore((s) => s.activeId);
 
   // Tab ids that have been activated at least once and should stay mounted.
-  const mountedRef = useRef<Set<string>>(new Set());
-  const [, forceRender] = useState(0);
-
-  useEffect(() => {
-    if (activeId && !mountedRef.current.has(activeId)) {
-      mountedRef.current.add(activeId);
-      forceRender((n) => n + 1);
-    }
-  }, [activeId]);
+  // Updating during render (not in an effect) lets React fold the new id into
+  // this same render pass instead of an extra post-paint commit on every switch.
+  const [mountedIds, setMountedIds] = useState<Set<string>>(
+    () => new Set(activeId ? [activeId] : []),
+  );
+  if (activeId && !mountedIds.has(activeId)) {
+    setMountedIds((prev) => new Set(prev).add(activeId));
+  }
 
   if (!activeId) {
     return <LauncherPanel />;
@@ -36,7 +35,7 @@ export function TabsArea() {
       {tabs.map((tab) => {
         // The active tab always mounts immediately; previously-visited tabs
         // stay mounted; never-visited tabs render nothing until activated.
-        const mount = tab.id === activeId || mountedRef.current.has(tab.id);
+        const mount = tab.id === activeId || mountedIds.has(tab.id);
         return (
           <div
             key={tab.id}
