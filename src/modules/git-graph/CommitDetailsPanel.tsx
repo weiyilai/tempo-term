@@ -1,8 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { Resizer } from "@/components/Resizer";
+import { useChatStore } from "@/modules/ai/store/chatStore";
 import { gitCommitDetails, gitCommitFileDiff } from "./lib/gitGraphBridge";
 import { parseDiffLines } from "./lib/parseDiff";
 import { DiffView } from "./DiffView";
+import { DiffExplain } from "./DiffExplain";
 import type { CommitDetails, CommitNode, DiffLine } from "./types";
 
 export interface CommitDetailsLabels {
@@ -53,6 +57,20 @@ export function CommitDetailsPanel({ repo, commit, onClose, labels }: CommitDeta
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [diffLines, setDiffLines] = useState<DiffLine[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [diffText, setDiffText] = useState("");
+  const [tab, setTab] = useState<"diff" | "ai">("diff");
+  const [leftWidth, setLeftWidth] = useState<number>(() => {
+    const v = Number(localStorage.getItem("tempoterm-gitgraph-details-left-width"));
+    return Number.isFinite(v) && v > 0 ? v : 280;
+  });
+
+  const { i18n } = useTranslation("gitGraph");
+  const providerId = useChatStore((s) => s.providerId);
+  const model = useChatStore((s) => s.model);
+
+  const persistLeftWidth = useCallback(() => {
+    localStorage.setItem("tempoterm-gitgraph-details-left-width", String(leftWidth));
+  }, [leftWidth]);
 
   // Load message + changed files when the commit changes; auto-open first file.
   useEffect(() => {
@@ -79,21 +97,26 @@ export function CommitDetailsPanel({ repo, commit, onClose, labels }: CommitDeta
     };
   }, [repo, commit.hash]);
 
-  // Lazily load the selected file's diff.
+  // Lazily load the selected file's diff (both parsed lines and raw text), and
+  // reset to the Diff tab when the file changes.
   useEffect(() => {
+    setTab("diff");
     if (!selectedFile) {
       setDiffLines([]);
+      setDiffText("");
       return;
     }
     let cancelled = false;
     gitCommitFileDiff(repo, commit.hash, selectedFile)
       .then((diff) => {
         if (!cancelled) {
+          setDiffText(diff);
           setDiffLines(parseDiffLines(diff));
         }
       })
       .catch(() => {
         if (!cancelled) {
+          setDiffText("");
           setDiffLines([]);
         }
       });
@@ -120,61 +143,123 @@ export function CommitDetailsPanel({ repo, commit, onClose, labels }: CommitDeta
 
       {error && <div className="px-3 py-1.5 text-xs text-danger" role="alert">{error}</div>}
 
-      <div className="max-h-[45%] shrink-0 overflow-auto px-3 py-2">
-        <div className="flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-[11px] text-fg-subtle">
-          <span>
-            {labels.author}: {commit.author}
-          </span>
-          <span>
-            {labels.date}: {commit.date}
-          </span>
-        </div>
-        {details && (
-          <pre className="mt-2 whitespace-pre-wrap font-sans text-xs text-fg">
-            {details.message}
-          </pre>
-        )}
-        <div className="mt-2">
-          <div className="mb-1 text-[11px] font-medium text-fg-subtle">
-            {labels.changedFiles} ({details?.files.length ?? 0})
+      <div className="flex min-h-0 flex-1">
+        {/* 左欄：metadata + 訊息 + 變更檔案 */}
+        <div
+          style={{ width: `${leftWidth}px` }}
+          className="shrink-0 overflow-auto px-3 py-2"
+        >
+          <div className="flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-[11px] text-fg-subtle">
+            <span>
+              {labels.author}: {commit.author}
+            </span>
+            <span>
+              {labels.date}: {commit.date}
+            </span>
           </div>
-          {details && details.files.length === 0 ? (
-            <div className="text-[11px] text-fg-subtle">{labels.noChanges}</div>
-          ) : (
-            <ul className="space-y-0.5">
-              {details?.files.map((f) => (
-                <li key={f.path}>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedFile(f.path)}
-                    className={`flex w-full items-center gap-2 rounded px-2 py-0.5 text-left font-mono text-[11px] ${
-                      selectedFile === f.path
-                        ? "bg-bg-elevated text-fg"
-                        : "text-fg-muted hover:bg-bg-elevated/50"
-                    }`}
-                  >
-                    <span
-                      className={`w-3 shrink-0 font-semibold ${STATUS_COLORS[f.status] ?? "text-fg-muted"}`}
+          {details && (
+            <pre className="mt-2 whitespace-pre-wrap font-sans text-xs text-fg">
+              {details.message}
+            </pre>
+          )}
+          <div className="mt-2">
+            <div className="mb-1 text-[11px] font-medium text-fg-subtle">
+              {labels.changedFiles} ({details?.files.length ?? 0})
+            </div>
+            {details && details.files.length === 0 ? (
+              <div className="text-[11px] text-fg-subtle">{labels.noChanges}</div>
+            ) : (
+              <ul className="space-y-0.5">
+                {details?.files.map((f) => (
+                  <li key={f.path}>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFile(f.path)}
+                      className={`flex w-full items-center gap-2 rounded px-2 py-0.5 text-left font-mono text-[11px] ${
+                        selectedFile === f.path
+                          ? "bg-bg-elevated text-fg"
+                          : "text-fg-muted hover:bg-bg-elevated/50"
+                      }`}
                     >
-                      {f.status}
-                    </span>
-                    <span className="truncate">{f.path}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+                      <span
+                        className={`w-3 shrink-0 font-semibold ${STATUS_COLORS[f.status] ?? "text-fg-muted"}`}
+                      >
+                        {f.status}
+                      </span>
+                      <span className="truncate">{f.path}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        <Resizer
+          orientation="vertical"
+          onResize={(delta) =>
+            setLeftWidth((w) => Math.min(640, Math.max(180, w + delta)))
+          }
+          onResizeEnd={persistLeftWidth}
+        />
+
+        {/* 右欄：分頁 + diff/AI */}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {selectedFile ? (
+            <>
+              <div className="flex shrink-0 items-center gap-1 border-b border-border bg-bg-inset px-2 py-1">
+                <button
+                  type="button"
+                  onClick={() => setTab("diff")}
+                  className={`rounded px-2 py-0.5 text-[11px] ${
+                    tab === "diff"
+                      ? "bg-bg-elevated text-fg"
+                      : "text-fg-subtle hover:text-fg"
+                  }`}
+                >
+                  {labels.diffTab}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab("ai")}
+                  className={`rounded px-2 py-0.5 text-[11px] ${
+                    tab === "ai"
+                      ? "bg-bg-elevated text-fg"
+                      : "text-fg-subtle hover:text-fg"
+                  }`}
+                >
+                  {labels.aiTab}
+                </button>
+              </div>
+              <div className="min-h-0 flex-1">
+                {tab === "diff" ? (
+                  <DiffView lines={diffLines} emptyLabel={labels.noDiff} />
+                ) : (
+                  <DiffExplain
+                    key={`${commit.hash}|${selectedFile}`}
+                    commitHash={commit.hash}
+                    file={selectedFile}
+                    diffText={diffText}
+                    providerId={providerId}
+                    model={model}
+                    lang={i18n.language}
+                    labels={{
+                      generate: labels.aiGenerate,
+                      explaining: labels.aiExplaining,
+                      regenerate: labels.aiRegenerate,
+                      needKey: labels.aiNeedKey,
+                      empty: labels.aiEmpty,
+                    }}
+                  />
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="flex h-full items-center justify-center text-xs text-fg-subtle">
+              {labels.noFileSelected}
+            </div>
           )}
         </div>
-      </div>
-
-      <div className="min-h-0 flex-1 border-t border-border">
-        {selectedFile ? (
-          <DiffView lines={diffLines} emptyLabel={labels.noDiff} />
-        ) : (
-          <div className="flex h-full items-center justify-center text-xs text-fg-subtle">
-            {labels.noFileSelected}
-          </div>
-        )}
       </div>
     </div>
   );
