@@ -10,6 +10,7 @@ export interface CommitDetailsLabels {
   date: string;
   changedFiles: string;
   noChanges: string;
+  noDiff: string;
   noFileSelected: string;
   close: string;
 }
@@ -110,7 +111,7 @@ export function CommitDetailsPanel({ repo, commit, onClose, labels }: CommitDeta
         </button>
       </div>
 
-      {error && <div className="px-3 py-1.5 text-xs text-danger">{error}</div>}
+      {error && <div className="px-3 py-1.5 text-xs text-danger" role="alert">{error}</div>}
 
       <div className="max-h-[45%] shrink-0 overflow-auto px-3 py-2">
         <div className="flex flex-wrap gap-x-4 gap-y-0.5 font-mono text-[11px] text-fg-subtle">
@@ -161,7 +162,7 @@ export function CommitDetailsPanel({ repo, commit, onClose, labels }: CommitDeta
 
       <div className="min-h-0 flex-1 border-t border-border">
         {selectedFile ? (
-          <DiffView lines={diffLines} emptyLabel={labels.noChanges} />
+          <DiffView lines={diffLines} emptyLabel={labels.noDiff} />
         ) : (
           <div className="flex h-full items-center justify-center text-xs text-fg-subtle">
             {labels.noFileSelected}

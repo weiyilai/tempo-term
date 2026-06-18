@@ -27,6 +27,7 @@
     "date": "日期",
     "changedFiles": "變更檔案",
     "noChanges": "此提交無變更可顯示",
+    "noDiff": "沒有可顯示的差異",
     "noFileSelected": "選一個檔案看差異",
     "close": "關閉"
   },

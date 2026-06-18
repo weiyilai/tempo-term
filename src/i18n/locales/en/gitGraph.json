@@ -27,6 +27,7 @@
     "date": "Date",
     "changedFiles": "Changed Files",
     "noChanges": "This commit has no changes to show",
+    "noDiff": "No diff to display",
     "noFileSelected": "Select a file to see its diff",
     "close": "Close"
   },
