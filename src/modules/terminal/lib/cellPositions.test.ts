@@ -35,6 +35,23 @@ describe("buildCellPositions", () => {
     expect(spans[1]).toEqual({ startX: 3, endX: 3, y: 1 });
   });
 
+  it("renders a never-written cell as a space so adjacent paths stay separate", () => {
+    // A never-written cell is width 1 with empty chars (NULL_CELL_WIDTH = 1),
+    // not a width-0 spacer; it must become a space, not be dropped, or two
+    // paths either side of it would merge into one bogus token.
+    const row: TerminalRow = {
+      y: 1,
+      cells: [
+        { chars: "a", width: 1 },
+        { chars: "", width: 1 },
+        { chars: "b", width: 1 },
+      ],
+    };
+    const { text, spans } = buildCellPositions([row]);
+    expect(text).toBe("a b");
+    expect(spans[2]).toEqual({ startX: 3, endX: 3, y: 1 });
+  });
+
   it("continues onto a wrapped row with its own column origin", () => {
     const { text, spans } = buildCellPositions([
       asciiRow(4, "ab"),

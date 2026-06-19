@@ -44,11 +44,14 @@ export function buildCellPositions(rows: TerminalRow[]): CellPositions {
   for (const row of rows) {
     for (let col = 0; col < row.cells.length; col += 1) {
       const cell = row.cells[col];
-      // The spacer column after a wide glyph carries no text of its own.
+      // width 0 only ever marks the spacer column that follows a wide (width-2)
+      // glyph; it carries no text of its own, so skip it. Never-written cells
+      // are width 1 with empty chars and fall through to the space below.
       if (cell.width === 0) {
         continue;
       }
-      // Never-written cells translate to a single space, like xterm does.
+      // Empty cells translate to a single space, matching xterm's
+      // translateToString(false) so findFilePaths sees the same text.
       const chars = cell.chars === "" ? " " : cell.chars;
       const startX = col + 1;
       const endX = startX + Math.max(cell.width, 1) - 1;
