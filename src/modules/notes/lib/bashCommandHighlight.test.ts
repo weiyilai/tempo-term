@@ -62,6 +62,18 @@ describe("bashCommandHighlight", () => {
     expect(scopeOf("FOO=bar sudo docker ps", "docker")).toBe("hljs-built_in");
   });
 
+  it("does not color a standalone env assignment as a command", () => {
+    expect(scopeOf("FOO=bar", "FOO")).toBeNull();
+    expect(scopeOf("FOO+=bar", "FOO")).toBeNull();
+  });
+
+  it("handles a quoted value in a leading env assignment", () => {
+    const code = 'COMMIT_MSG="feat: some message" git commit';
+    expect(scopeOf(code, "git")).toBe("hljs-built_in");
+    // text inside the quoted value must not leak out as a command
+    expect(scopeOf(code, "some")).toBeNull();
+  });
+
   it("preserves string highlighting", () => {
     expect(scopeOf('echo "hi"', '"hi"')).toBe("hljs-string");
   });

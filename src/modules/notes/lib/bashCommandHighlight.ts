@@ -18,13 +18,16 @@ export function bashCommandHighlight(hljs: HLJSApi): Language {
     begin: [
       // 1: statement boundary (start of block, newline, ; | & ( ) + trailing space
       /(?:^|[\n;&|(])\s*/,
-      // 2: optional leading env-var assignments, e.g. FOO=bar
-      /(?:\w+=\S*\s+)*/,
+      // 2: optional leading env-var assignments; the value may be quoted and
+      //    contain spaces, e.g. FOO=bar or MSG="hi there"
+      /(?:\w+=(?:"[^"]*"|'[^']*'|[^\s'"]+)*\s+)*/,
       // 3: optional command wrappers
       /(?:sudo\s+|command\s+|exec\s+)?/,
       // 4: the command name (only this group is scoped); excludes shell keywords,
-      //    allows ./ ../ / path prefixes for script invocations
-      new RegExp(`(?!(?:${SHELL_KEYWORDS})\\b)(?:\\.{0,2}/)?[A-Za-z_][\\w./-]*`),
+      //    allows ./ ../ / path prefixes for script invocations. The trailing
+      //    lookaheads pin the match to a whole word and reject assignment
+      //    prefixes (FOO=bar), so an env var alone is not read as a command.
+      new RegExp(`(?!(?:${SHELL_KEYWORDS})\\b)(?:\\.{0,2}/)?[A-Za-z_][\\w./-]*(?![\\w./-])(?!\\+?=)`),
     ],
     beginScope: { 4: "built_in" },
     relevance: 0,
