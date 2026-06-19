@@ -132,17 +132,22 @@ export function GitGraphToolbar({
   const orderSection = (
     <>
       <div className="my-1 border-t border-border" />
-      <div className="px-2 py-1 font-mono text-[11px] text-fg-subtle">
+      <div
+        className="px-2 py-1 font-mono text-[11px] text-fg-subtle"
+        aria-hidden="true"
+      >
         {labels.commitOrder}
       </div>
-      {orderOptions.map((o) => (
-        <OrderRow
-          key={o.value}
-          label={o.label}
-          checked={commitOrder === o.value}
-          onSelect={() => onChangeOrder(o.value)}
-        />
-      ))}
+      <div role="radiogroup" aria-label={labels.commitOrder}>
+        {orderOptions.map((o) => (
+          <OrderRow
+            key={o.value}
+            label={o.label}
+            checked={commitOrder === o.value}
+            onSelect={() => onChangeOrder(o.value)}
+          />
+        ))}
+      </div>
     </>
   );
 

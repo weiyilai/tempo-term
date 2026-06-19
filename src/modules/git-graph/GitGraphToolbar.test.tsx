@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GitGraphToolbar, type GitGraphToolbarLabels } from "./GitGraphToolbar";
 import type { Branch } from "./types";
@@ -193,6 +193,15 @@ describe("GitGraphToolbar commit ordering", () => {
 
     expect(screen.getByRole("radio", { name: labels.orderTopo })).toBeChecked();
     expect(screen.getByRole("radio", { name: labels.orderDate })).not.toBeChecked();
+  });
+
+  it("groups the order options as a labelled radiogroup for screen readers", () => {
+    renderToolbar({ commitOrder: "date" });
+
+    fireEvent.click(screen.getByTitle(labels.displayOptions));
+
+    const group = screen.getByRole("radiogroup", { name: labels.commitOrder });
+    expect(within(group).getAllByRole("radio")).toHaveLength(2);
   });
 
   it("changes the order from the overflow menu (compact)", () => {
