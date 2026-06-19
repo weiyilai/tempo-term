@@ -58,32 +58,36 @@ pub fn split_new_lines(contents: &str, from_offset: usize) -> (Vec<String>, usiz
 /// untouched. If the offset is past the end (the file shrank or was rewritten),
 /// or the tail isn't valid UTF-8 (the seek landed mid-character), we fall back to
 /// reading the whole file from the start, matching `split_new_lines`'s recovery.
-fn read_new_lines(path: &Path, from_offset: usize) -> (Vec<String>, usize) {
+fn read_new_lines(path: &Path, from_offset: usize) -> Option<(Vec<String>, usize)> {
     let len = match std::fs::metadata(path) {
         Ok(meta) => meta.len() as usize,
-        Err(_) => return (Vec::new(), from_offset),
+        // The tracked file is gone (deleted/rotated): signal so the caller can
+        // clear its cursor and rescan instead of getting stuck on a dead path.
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(_) => return Some((Vec::new(), from_offset)),
     };
 
     if from_offset > len {
-        return read_from_start(path, from_offset);
+        return Some(read_from_start(path, from_offset));
     }
 
     let mut file = match File::open(path) {
         Ok(file) => file,
-        Err(_) => return (Vec::new(), from_offset),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(_) => return Some((Vec::new(), from_offset)),
     };
     if file.seek(SeekFrom::Start(from_offset as u64)).is_err() {
-        return (Vec::new(), from_offset);
+        return Some((Vec::new(), from_offset));
     }
     let mut tail = String::new();
     match file.read_to_string(&mut tail) {
         Ok(_) => {
             let (lines, consumed) = split_new_lines(&tail, 0);
-            (lines, from_offset + consumed)
+            Some((lines, from_offset + consumed))
         }
         // Non-UTF-8 tail: the offset landed mid-character (an in-place rewrite),
         // so reparse the whole file from the top instead of dropping bytes.
-        Err(_) => read_from_start(path, from_offset),
+        Err(_) => Some(read_from_start(path, from_offset)),
     }
 }
 
@@ -189,7 +193,15 @@ fn build_watcher(app: &AppHandle, dir: &Path, cwd: String) -> Result<Recommended
             Some(path) => path,
             None => return,
         };
-        let (lines, new_offset) = read_new_lines(&latest, cursor.offset);
+        let (lines, new_offset) = match read_new_lines(&latest, cursor.offset) {
+            Some(result) => result,
+            // The tracked file vanished; drop it so the next event rescans the
+            // directory and picks up the new session.
+            None => {
+                cursor.current = None;
+                return;
+            }
+        };
         cursor.offset = new_offset;
         if !lines.is_empty() {
             let reset = cursor.pending_reset;
@@ -341,17 +353,17 @@ mod tests {
         // Start tailing at the end of the existing file: no history replayed.
         let offset = byte_len(&path);
         assert_eq!(offset, 4);
-        let (lines, offset) = read_new_lines(&path, offset);
+        let (lines, offset) = read_new_lines(&path, offset).unwrap();
         assert!(lines.is_empty());
 
         // Append more lines; only the appended tail comes back.
         std::fs::write(&path, "a\nb\nc\nd\n").unwrap();
-        let (lines, offset) = read_new_lines(&path, offset);
+        let (lines, offset) = read_new_lines(&path, offset).unwrap();
         assert_eq!(lines, vec!["c", "d"]);
         assert_eq!(offset, 8);
 
         // A read from the new offset with nothing appended yields nothing.
-        let (lines, _) = read_new_lines(&path, offset);
+        let (lines, _) = read_new_lines(&path, offset).unwrap();
         assert!(lines.is_empty());
 
         let _ = std::fs::remove_dir_all(&dir);
@@ -364,9 +376,25 @@ mod tests {
         std::fs::write(&path, "x\n").unwrap();
 
         // Offset past the end (file was truncated/rewritten) replays from the top.
-        let (lines, offset) = read_new_lines(&path, 100);
+        let (lines, offset) = read_new_lines(&path, 100).unwrap();
         assert_eq!(lines, vec!["x"]);
         assert_eq!(offset, 2);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tail_read_signals_a_missing_file_so_the_watcher_can_recover() {
+        // If the tracked transcript is deleted or rotated away, the read must
+        // report the file is gone (None) so the watcher can clear its cursor and
+        // rescan for the new session instead of getting stuck on a dead path.
+        let dir = temp_progress_dir("deleted");
+        let path = dir.join("session.jsonl");
+        std::fs::write(&path, "a\n").unwrap();
+        assert!(read_new_lines(&path, 0).is_some());
+
+        std::fs::remove_file(&path).unwrap();
+        assert!(read_new_lines(&path, 0).is_none());
 
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -382,7 +410,7 @@ mod tests {
         let path = dir.join("session.jsonl");
         std::fs::write(&path, "中\n").unwrap();
 
-        let (lines, offset) = read_new_lines(&path, 1);
+        let (lines, offset) = read_new_lines(&path, 1).unwrap();
         assert_eq!(lines, vec!["中"]);
         assert_eq!(offset, 4);
 
