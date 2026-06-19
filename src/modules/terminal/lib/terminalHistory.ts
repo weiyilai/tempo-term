@@ -47,6 +47,32 @@ export function serializeBufferText(term: Terminal, maxLines?: number): string {
 }
 
 /**
+ * Strip the restored read-only history from a freshly serialized buffer so a
+ * snapshot only persists what the live shell produced this session.
+ *
+ * On pane open we prepend the previously saved scrollback (greyed) plus a
+ * "previous session" separator. Serializing the whole buffer would re-save that
+ * restored block, so each reopen would stack another duplicated copy. Dropping
+ * the first `restoredLineCount` logical lines keeps the persisted file to a
+ * single session's output and breaks the duplication loop.
+ *
+ * `restoredLineCount` counts the restored history lines plus the separator. If
+ * the buffer was cleared/reset below that prefix (fewer lines than expected),
+ * there is no live output to keep and nothing of the prefix may leak back, so
+ * the result is empty.
+ */
+export function dropRestoredPrefix(text: string, restoredLineCount: number): string {
+  if (restoredLineCount <= 0) {
+    return text;
+  }
+  const lines = text.split("\n");
+  if (lines.length <= restoredLineCount) {
+    return "";
+  }
+  return lines.slice(restoredLineCount).join("\n");
+}
+
+/**
  * Keep only the last `maxLines` lines of a serialized terminal buffer, so a
  * persisted scrollback file stays bounded in size and quick to restore.
  */

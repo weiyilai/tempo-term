@@ -6,6 +6,7 @@ import { createTerminal, type TerminalHandle } from "./lib/createTerminal";
 import { openPty, type PtySession } from "./lib/pty-bridge";
 import {
   deleteTerminalHistory,
+  dropRestoredPrefix,
   loadTerminalHistory,
   saveTerminalHistory,
   serializeBufferText,
@@ -380,6 +381,10 @@ export function TerminalView({
     safeFit();
 
     let disposed = false;
+    // How many leading logical lines the restore wrote (the read-only history
+    // plus the separator). The snapshot strips these so it never re-saves the
+    // restored block, which would otherwise stack duplicates on every reopen.
+    let restoredLineCount = 0;
 
     // Restore the saved scrollback (read-only history) before the shell starts,
     // so it appears above a fresh prompt. Gated on the user setting.
@@ -396,6 +401,8 @@ export function TerminalView({
       // and convert "\n" to "\r\n" for the terminal.
       term.write(`\x1b[90m${saved.replace(/\n/g, "\r\n")}\x1b[0m\r\n`);
       term.write("\x1b[90m── previous session ──\x1b[0m\r\n");
+      // Saved logical lines plus the one separator line we just appended.
+      restoredLineCount = saved.split("\n").length + 1;
     };
 
     void restoreHistory().then(() => {
@@ -466,10 +473,12 @@ export function TerminalView({
         return;
       }
       dirty = false;
-      const data = trimScrollback(
-        serializeBufferText(term, MAX_SCROLLBACK_LINES),
-        MAX_SCROLLBACK_LINES,
-      );
+      // Serialize the whole buffer first, then drop the restored read-only
+      // prefix so only this session's live output is persisted. (Capping inside
+      // serializeBufferText could shift which lines are dropped, so strip the
+      // prefix on the full text, then trim for size.)
+      const live = dropRestoredPrefix(serializeBufferText(term), restoredLineCount);
+      const data = trimScrollback(live, MAX_SCROLLBACK_LINES);
       void saveTerminalHistory(leafId, data).catch(() => {
         dirty = true;
       });
