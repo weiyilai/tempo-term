@@ -182,9 +182,9 @@ export function LauncherPanel({ target }: LauncherPanelProps) {
   ];
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-6 bg-bg text-fg-subtle">
-      <p className="text-sm">{t("workspace.launcherHint")}</p>
-      <div className="flex w-72 flex-col gap-5">
+    <div className="flex h-full flex-col items-center justify-center gap-6 px-4 bg-bg text-fg-subtle">
+      <p className="text-center text-sm">{t("workspace.launcherHint")}</p>
+      <div className="flex w-full max-w-72 flex-col gap-5">
         {groups.map((group) => (
           <div key={group.key}>
             <h3 className="mb-1 text-xs font-medium uppercase tracking-wide text-fg-subtle">
