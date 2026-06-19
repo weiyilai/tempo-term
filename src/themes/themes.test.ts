@@ -44,4 +44,12 @@ describe("applyTheme", () => {
     applyTheme(getTheme("vitesse-light"), root);
     expect(root.style.colorScheme).toBe("light");
   });
+
+  it("sets data-appearance from the theme appearance", () => {
+    const root = document.createElement("div");
+    applyTheme(getTheme("vitesse-light"), root);
+    expect(root.dataset.appearance).toBe("light");
+    applyTheme(getTheme("vitesse-dark"), root);
+    expect(root.dataset.appearance).toBe("dark");
+  });
 });

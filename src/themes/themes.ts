@@ -448,5 +448,6 @@ export function applyTheme(theme: AppTheme, root: HTMLElement): void {
     root.style.setProperty(name, value);
   }
   root.dataset.theme = theme.id;
+  root.dataset.appearance = theme.appearance;
   root.style.colorScheme = theme.appearance;
 }
