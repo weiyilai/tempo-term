@@ -75,15 +75,12 @@ pub fn terminal_history_clear(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub fn terminal_history_prune(app: AppHandle, keep: Vec<String>) -> Result<(), String> {
     let dir = history_dir(&app)?;
+    let keep: std::collections::HashSet<String> = keep.into_iter().collect();
     for entry in fs::read_dir(&dir).map_err(|e| e.to_string())?.flatten() {
-        let stem = entry
-            .path()
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .map(String::from);
-        if let Some(stem) = stem {
-            if !keep.contains(&stem) {
-                let _ = fs::remove_file(entry.path());
+        let path = entry.path();
+        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+            if !keep.contains(stem) {
+                let _ = fs::remove_file(&path);
             }
         }
     }

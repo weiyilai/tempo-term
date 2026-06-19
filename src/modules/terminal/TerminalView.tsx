@@ -439,13 +439,25 @@ export function TerminalView({
 
     // Snapshot the scrollback periodically so a crash/quit loses at most a few
     // seconds. Overwrites the same per-pane file; gated on the user setting.
+    // Only writes when the buffer actually changed since the last snapshot, so
+    // an idle terminal does no work.
+    let dirty = false;
+    const writeListener = term.onWriteParsed(() => {
+      dirty = true;
+    });
     const snapshot = () => {
       const leafId = leafIdRef.current;
-      if (!leafId || !useSettingsStore.getState().restoreTerminalHistory) {
+      if (!leafId || !dirty || !useSettingsStore.getState().restoreTerminalHistory) {
         return;
       }
-      const data = trimScrollback(serializeBufferText(term), MAX_SCROLLBACK_LINES);
-      void saveTerminalHistory(leafId, data).catch(() => {});
+      dirty = false;
+      const data = trimScrollback(
+        serializeBufferText(term, MAX_SCROLLBACK_LINES),
+        MAX_SCROLLBACK_LINES,
+      );
+      void saveTerminalHistory(leafId, data).catch(() => {
+        dirty = true;
+      });
     };
     const snapshotTimer = setInterval(snapshot, 5000);
 
@@ -461,6 +473,7 @@ export function TerminalView({
     return () => {
       disposed = true;
       clearInterval(snapshotTimer);
+      writeListener.dispose();
       observer.disconnect();
       document.removeEventListener("keydown", onKeyDownCapture, true);
       document.removeEventListener("paste", onPasteCapture, true);

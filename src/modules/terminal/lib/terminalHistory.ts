@@ -10,11 +10,25 @@ export const MAX_SCROLLBACK_LINES = 1000;
  * it reflows cleanly when restored into a pane of any width, so resizing never
  * truncates the history. Lines are separated by "\n".
  */
-export function serializeBufferText(term: Terminal): string {
+export function serializeBufferText(term: Terminal, maxLines?: number): string {
   const buffer = term.buffer.active;
   const lines: string[] = [];
   let current = "";
-  for (let y = 0; y < buffer.length; y++) {
+  // Start near the end when capped, then back up to a non-wrapped row so the
+  // first kept logical line is whole — avoids scanning thousands of rows only
+  // to trim them away.
+  let startY = 0;
+  if (maxLines !== undefined) {
+    startY = Math.max(0, buffer.length - maxLines);
+    while (startY > 0) {
+      const line = buffer.getLine(startY);
+      if (line && !line.isWrapped) {
+        break;
+      }
+      startY--;
+    }
+  }
+  for (let y = startY; y < buffer.length; y++) {
     const line = buffer.getLine(y);
     if (!line) {
       continue;
