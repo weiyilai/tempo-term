@@ -30,6 +30,15 @@ pub fn delete(path: &str) -> Result<(), String> {
     trash::delete(path).map_err(|e| e.to_string())
 }
 
+/// Rename or move a file or directory from `from` to `to`, failing if anything
+/// already exists at `to` so a rename never clobbers another note.
+pub fn rename(from: &str, to: &str) -> Result<(), String> {
+    if Path::new(to).exists() {
+        return Err(format!("{to} already exists"));
+    }
+    std::fs::rename(from, to).map_err(|e| e.to_string())
+}
+
 /// Reveal an entry in the platform's file manager, selecting it where possible:
 /// Finder on macOS, Explorer on Windows, and a best-effort open of the parent
 /// directory elsewhere.
