@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { GitBranch, Loader2, Minus, Plus, RefreshCw, Sparkles, UploadCloud } from "lucide-react";
+import {
+  Folder,
+  FolderTree,
+  GitBranch,
+  List,
+  Loader2,
+  Minus,
+  Plus,
+  RefreshCw,
+  Sparkles,
+  UploadCloud,
+} from "lucide-react";
 import {
   gitCommit,
   gitDiff,
@@ -14,10 +25,13 @@ import {
   type FileStatus,
   type GitStatus,
 } from "./lib/gitBridge";
+import { groupByFolder } from "./lib/groupByFolder";
 import { generateCommitMessage } from "./lib/aiCommit";
 import { withMinDuration } from "@/lib/withMinDuration";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useChatStore } from "@/modules/ai/store/chatStore";
+
+type ViewMode = "flat" | "folder";
 
 // Local git reads finish almost instantly; keep the refresh spinner up at least
 // this long so the feedback is perceptible.
@@ -33,11 +47,13 @@ const STATUS_COLOR: Record<string, string> = {
 
 function StatusRow({
   file,
+  displayPath,
   actionIcon: ActionIcon,
   actionLabel,
   onAction,
 }: {
   file: FileStatus;
+  displayPath?: string;
   actionIcon: typeof Plus;
   actionLabel: string;
   onAction: (path: string) => void;
@@ -52,18 +68,109 @@ function StatusRow({
         {file.status}
       </span>
       <span className="flex-1 truncate text-fg-muted" title={file.path}>
-        {file.path}
+        {displayPath ?? file.path}
       </span>
       <button
         type="button"
         aria-label={actionLabel}
         title={actionLabel}
         onClick={() => onAction(file.path)}
-        className="rounded p-0.5 text-fg-subtle opacity-0 hover:bg-border-strong hover:text-fg group-hover:opacity-100"
+        className="rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
       >
         <ActionIcon size={14} />
       </button>
     </li>
+  );
+}
+
+function basename(path: string): string {
+  // git reports an untracked directory as a path ending in "/"; keep the slash
+  // in the label so it still reads as a folder instead of a blank name.
+  const isDir = path.endsWith("/");
+  const normalized = isDir ? path.slice(0, -1) : path;
+  const name = normalized.split("/").pop() || normalized;
+  return isDir ? `${name}/` : name;
+}
+
+/**
+ * Renders a set of changed files either flat (one row per file, full path) or
+ * grouped by folder. In folder mode each folder header carries a button that
+ * runs the same action across every file under it (stage / unstage the whole
+ * folder), and the rows show just the file name since the folder is the header.
+ */
+function FileList({
+  files,
+  viewMode,
+  rootFolderLabel,
+  actionIcon,
+  actionLabel,
+  folderActionLabel,
+  onFileAction,
+  onFolderAction,
+}: {
+  files: FileStatus[];
+  viewMode: ViewMode;
+  rootFolderLabel: string;
+  actionIcon: typeof Plus;
+  actionLabel: string;
+  folderActionLabel: string;
+  onFileAction: (path: string) => void;
+  onFolderAction: (paths: string[]) => void;
+}) {
+  if (viewMode === "flat") {
+    return (
+      <ul>
+        {files.map((file) => (
+          <StatusRow
+            key={file.path}
+            file={file}
+            actionIcon={actionIcon}
+            actionLabel={actionLabel}
+            onAction={onFileAction}
+          />
+        ))}
+      </ul>
+    );
+  }
+
+  const FolderActionIcon = actionIcon;
+  return (
+    <ul>
+      {groupByFolder(files).map((group) => {
+        const display = group.folder === "" ? rootFolderLabel : group.folder;
+        return (
+          <li key={group.folder || "(root)"}>
+            <div className="group flex items-center gap-2 px-3 py-1 text-sm hover:bg-bg-elevated/60">
+              <Folder size={13} className="shrink-0 text-fg-subtle" />
+              <span className="flex-1 truncate text-fg-muted" title={display}>
+                {display}
+              </span>
+              <button
+                type="button"
+                aria-label={`${folderActionLabel}: ${display}`}
+                title={`${folderActionLabel}: ${display}`}
+                onClick={() => onFolderAction(group.files.map((f) => f.path))}
+                className="rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
+              >
+                <FolderActionIcon size={14} />
+              </button>
+            </div>
+            <ul className="pl-3">
+              {group.files.map((file) => (
+                <StatusRow
+                  key={file.path}
+                  file={file}
+                  displayPath={basename(file.path)}
+                  actionIcon={actionIcon}
+                  actionLabel={actionLabel}
+                  onAction={onFileAction}
+                />
+              ))}
+            </ul>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -77,6 +184,7 @@ export function SourceControlView() {
   const [message, setMessage] = useState("");
   const [generating, setGenerating] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("flat");
   const [refreshing, setRefreshing] = useState(false);
   const providerId = useChatStore((s) => s.providerId);
   const model = useChatStore((s) => s.model);
@@ -175,16 +283,27 @@ export function SourceControlView() {
         <span className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
           {t("title")}
         </span>
-        <button
-          type="button"
-          aria-label={t("refresh")}
-          title={t("refresh")}
-          onClick={() => void refresh()}
-          disabled={refreshing}
-          className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-        </button>
+        <div className="flex items-center gap-0.5">
+          <button
+            type="button"
+            aria-label={viewMode === "flat" ? t("viewFolder") : t("viewFlat")}
+            title={viewMode === "flat" ? t("viewFolder") : t("viewFlat")}
+            onClick={() => setViewMode((m) => (m === "flat" ? "folder" : "flat"))}
+            className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+          >
+            {viewMode === "flat" ? <FolderTree size={14} /> : <List size={14} />}
+          </button>
+          <button
+            type="button"
+            aria-label={t("refresh")}
+            title={t("refresh")}
+            onClick={() => void refresh()}
+            disabled={refreshing}
+            className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+          >
+            <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+          </button>
+        </div>
       </div>
 
       {status?.branch && (
@@ -255,17 +374,22 @@ export function SourceControlView() {
             <h3 className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
               {t("stagedChanges")}
             </h3>
-            <ul>
-              {status!.staged.map((file) => (
-                <StatusRow
-                  key={`s-${file.path}`}
-                  file={file}
-                  actionIcon={Minus}
-                  actionLabel={t("unstage")}
-                  onAction={(path) => void withRepo((repo) => gitUnstage(repo, path))}
-                />
-              ))}
-            </ul>
+            <FileList
+              files={status!.staged}
+              viewMode={viewMode}
+              rootFolderLabel={t("rootFolder")}
+              actionIcon={Minus}
+              actionLabel={t("unstage")}
+              folderActionLabel={t("unstageFolder")}
+              onFileAction={(path) => void withRepo((repo) => gitUnstage(repo, path))}
+              onFolderAction={(paths) =>
+                void withRepo(async (repo) => {
+                  for (const path of paths) {
+                    await gitUnstage(repo, path);
+                  }
+                })
+              }
+            />
           </section>
         )}
 
@@ -293,17 +417,22 @@ export function SourceControlView() {
           {(status?.unstaged.length ?? 0) === 0 ? (
             <p className="px-3 py-1 text-xs text-fg-subtle">{t("noChanges")}</p>
           ) : (
-            <ul>
-              {status!.unstaged.map((file) => (
-                <StatusRow
-                  key={`u-${file.path}`}
-                  file={file}
-                  actionIcon={Plus}
-                  actionLabel={t("stage")}
-                  onAction={(path) => void withRepo((repo) => gitStage(repo, path))}
-                />
-              ))}
-            </ul>
+            <FileList
+              files={status!.unstaged}
+              viewMode={viewMode}
+              rootFolderLabel={t("rootFolder")}
+              actionIcon={Plus}
+              actionLabel={t("stage")}
+              folderActionLabel={t("stageFolder")}
+              onFileAction={(path) => void withRepo((repo) => gitStage(repo, path))}
+              onFolderAction={(paths) =>
+                void withRepo(async (repo) => {
+                  for (const path of paths) {
+                    await gitStage(repo, path);
+                  }
+                })
+              }
+            />
           )}
         </section>
 
