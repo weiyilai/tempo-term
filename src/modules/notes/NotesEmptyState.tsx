@@ -33,9 +33,8 @@ export function NotesEmptyState() {
         <FolderOpen size={15} className="shrink-0 text-accent" />
         {t("pickFolderCta")}
       </button>
-      <div className="space-y-1.5 text-xs text-fg-subtle">
-        <p className="text-fg-muted">{t("syncHintCloud")}</p>
-        <p>{t("syncHintGit")}</p>
+      <div className="text-xs text-fg-subtle">
+        <p>{t("folderHint")}</p>
       </div>
     </div>
   );
