@@ -45,6 +45,17 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // Persist and restore window size and position across launches. Only
+        // SIZE | POSITION so it never forces the window visible early — the
+        // frontend reveals it on first paint (see visible: false).
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    tauri_plugin_window_state::StateFlags::SIZE
+                        | tauri_plugin_window_state::StateFlags::POSITION,
+                )
+                .build(),
+        )
         .manage(PtyState::new())
         .invoke_handler(tauri::generate_handler![
             pty_open,
