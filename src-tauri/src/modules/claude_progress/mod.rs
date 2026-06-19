@@ -4,6 +4,8 @@
 //! function so it can be tested without the filesystem or the notify watcher.
 
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -47,9 +49,46 @@ pub fn split_new_lines(contents: &str, from_offset: usize) -> (Vec<String>, usiz
     }
 }
 
-/// Read the file and return the lines appended since `from_offset`. A read error
-/// (file missing, mid-rename) yields nothing and leaves the offset untouched.
+/// Read only the tail appended since `from_offset` and return the complete lines
+/// it contains. Seeks straight to the offset instead of reading the whole file,
+/// so cost scales with what was appended, not with the session's total size.
+///
+/// A read error (file missing, mid-rename) yields nothing and leaves the offset
+/// untouched. If the offset is past the end (the file shrank or was rewritten),
+/// or the tail isn't valid UTF-8 (the seek landed mid-character), we fall back to
+/// reading the whole file from the start, matching `split_new_lines`'s recovery.
 fn read_new_lines(path: &Path, from_offset: usize) -> (Vec<String>, usize) {
+    let len = match std::fs::metadata(path) {
+        Ok(meta) => meta.len() as usize,
+        Err(_) => return (Vec::new(), from_offset),
+    };
+
+    if from_offset > len {
+        return read_from_start(path, from_offset);
+    }
+
+    let mut file = match File::open(path) {
+        Ok(file) => file,
+        Err(_) => return (Vec::new(), from_offset),
+    };
+    if file.seek(SeekFrom::Start(from_offset as u64)).is_err() {
+        return (Vec::new(), from_offset);
+    }
+    let mut tail = String::new();
+    match file.read_to_string(&mut tail) {
+        Ok(_) => {
+            let (lines, consumed) = split_new_lines(&tail, 0);
+            (lines, from_offset + consumed)
+        }
+        // Non-UTF-8 tail: the offset landed mid-character (an in-place rewrite),
+        // so reparse the whole file from the top instead of dropping bytes.
+        Err(_) => read_from_start(path, from_offset),
+    }
+}
+
+/// Recovery path: read the entire file and re-split from `from_offset`, letting
+/// `split_new_lines` clamp an out-of-range or mid-character offset back to 0.
+fn read_from_start(path: &Path, from_offset: usize) -> (Vec<String>, usize) {
     match std::fs::read_to_string(path) {
         Ok(contents) => split_new_lines(&contents, from_offset),
         Err(_) => (Vec::new(), from_offset),
@@ -57,9 +96,10 @@ fn read_new_lines(path: &Path, from_offset: usize) -> (Vec<String>, usize) {
 }
 
 /// Byte length of a file, or 0 if it cannot be read. Used to start tailing at the
-/// end of an existing transcript so old history is never replayed.
+/// end of an existing transcript so old history is never replayed. Reads only the
+/// metadata, never the file contents.
 fn byte_len(path: &Path) -> usize {
-    std::fs::read_to_string(path).map_or(0, |contents| contents.len())
+    std::fs::metadata(path).map_or(0, |meta| meta.len() as usize)
 }
 
 /// Mangle a working directory into the folder name Claude Code stores its
@@ -117,19 +157,31 @@ fn build_watcher(app: &AppHandle, dir: &Path, cwd: String) -> Result<Recommended
     let cursor_cb = Arc::clone(&cursor);
 
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if res.is_err() {
-            return;
+        let event = match res {
+            Ok(event) => event,
+            Err(_) => return,
+        };
+
+        let mut cursor = cursor_cb.lock().unwrap();
+
+        // Only rescan the directory when a new session file might have appeared
+        // (a Create event) or when we don't yet have one to tail. Plain Modify
+        // events just append to the file we're already following, so reusing the
+        // stored path avoids walking the whole directory on every write.
+        if cursor.current.is_none() || matches!(event.kind, notify::EventKind::Create(_)) {
+            if let Some(latest) = latest_transcript(&dir_cb) {
+                if cursor.current.as_ref() != Some(&latest) {
+                    cursor.current = Some(latest);
+                    cursor.offset = 0;
+                    cursor.pending_reset = true;
+                }
+            }
         }
-        let latest = match latest_transcript(&dir_cb) {
+
+        let latest = match cursor.current.clone() {
             Some(path) => path,
             None => return,
         };
-        let mut cursor = cursor_cb.lock().unwrap();
-        if cursor.current.as_ref() != Some(&latest) {
-            cursor.current = Some(latest.clone());
-            cursor.offset = 0;
-            cursor.pending_reset = true;
-        }
         let (lines, new_offset) = read_new_lines(&latest, cursor.offset);
         cursor.offset = new_offset;
         if !lines.is_empty() {
@@ -260,5 +312,68 @@ mod tests {
         // start instead of panicking on a non-char-boundary slice.
         let (lines, _) = split_new_lines("中\n", 1);
         assert_eq!(lines, vec!["中"]);
+    }
+
+    fn temp_progress_dir(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "tempoterm-claude-progress-{}-{}",
+            tag,
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn tail_read_returns_only_the_lines_appended_after_the_offset() {
+        let dir = temp_progress_dir("tail");
+        let path = dir.join("session.jsonl");
+        std::fs::write(&path, "a\nb\n").unwrap();
+
+        // Start tailing at the end of the existing file: no history replayed.
+        let offset = byte_len(&path);
+        assert_eq!(offset, 4);
+        let (lines, offset) = read_new_lines(&path, offset);
+        assert!(lines.is_empty());
+
+        // Append more lines; only the appended tail comes back.
+        std::fs::write(&path, "a\nb\nc\nd\n").unwrap();
+        let (lines, offset) = read_new_lines(&path, offset);
+        assert_eq!(lines, vec!["c", "d"]);
+        assert_eq!(offset, 8);
+
+        // A read from the new offset with nothing appended yields nothing.
+        let (lines, _) = read_new_lines(&path, offset);
+        assert!(lines.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn tail_read_falls_back_to_the_start_when_the_file_shrank() {
+        let dir = temp_progress_dir("shrank");
+        let path = dir.join("session.jsonl");
+        std::fs::write(&path, "x\n").unwrap();
+
+        // Offset past the end (file was truncated/rewritten) replays from the top.
+        let (lines, offset) = read_new_lines(&path, 100);
+        assert_eq!(lines, vec!["x"]);
+        assert_eq!(offset, 2);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn byte_len_uses_metadata_for_the_file_size() {
+        let dir = temp_progress_dir("len");
+        let path = dir.join("session.jsonl");
+        std::fs::write(&path, "中\n").unwrap();
+        // "中" is 3 bytes plus the newline.
+        assert_eq!(byte_len(&path), 4);
+        // A missing file reports length 0.
+        assert_eq!(byte_len(&dir.join("missing.jsonl")), 0);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

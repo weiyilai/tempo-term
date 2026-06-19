@@ -93,4 +93,32 @@ describe("reduceProgress", () => {
     state = reduceProgress(state, { kind: "tool:start", id: "t1", name: "Bash" });
     expect(state.idle).toBe(false);
   });
+
+  it("returns the same state reference when a todo update changes nothing", () => {
+    const state = reduceProgress(emptyProgressState(), {
+      kind: "todo",
+      items: [
+        { text: "a", status: "in_progress" },
+        { text: "b", status: "pending" },
+      ],
+    });
+
+    const next = reduceProgress(state, {
+      kind: "todo",
+      items: [
+        { text: "a", status: "in_progress" },
+        { text: "b", status: "pending" },
+      ],
+    });
+
+    expect(next).toBe(state);
+  });
+
+  it("returns the same state reference when an idle event arrives while already idle", () => {
+    const state = reduceProgress(emptyProgressState(), { kind: "idle" });
+
+    const next = reduceProgress(state, { kind: "idle" });
+
+    expect(next).toBe(state);
+  });
 });
