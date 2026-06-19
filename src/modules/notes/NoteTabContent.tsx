@@ -43,9 +43,13 @@ export function NoteTabContent({ noteId, tabId, leafId }: NoteTabContentProps) {
   const pending = useRef<string | null>(null);
   // The last write this tab made, used to ignore the watcher echo of it.
   const selfWrite = useRef<{ path: string; at: number } | null>(null);
+  // True while a rename is in flight, so the remove/create events the rename
+  // produces for the old and new paths don't look like external changes.
+  const isRenaming = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
+    isRenaming.current = false;
     setContent(null);
     setNotFound(false);
     setExternalChanged(false);
@@ -80,6 +84,9 @@ export function NoteTabContent({ noteId, tabId, leafId }: NoteTabContentProps) {
     let unlisten: (() => void) | undefined;
     let disposed = false;
     void onNotesChanged((paths) => {
+      if (isRenaming.current) {
+        return;
+      }
       const action = decideExternalChange({
         notePath: path,
         changedPaths: paths,
@@ -133,6 +140,7 @@ export function NoteTabContent({ noteId, tabId, leafId }: NoteTabContentProps) {
   function commitTitle() {
     void (async () => {
       const store = useNotesStore.getState();
+      isRenaming.current = true;
       try {
         // Flush any pending edit to the current path first so the rename moves
         // the latest content instead of a stale debounced timer firing at the
@@ -147,8 +155,11 @@ export function NoteTabContent({ noteId, tabId, leafId }: NoteTabContentProps) {
         }
         const newPath = await store.renameNote(path, title);
         if (newPath !== path) {
+          // The path effect re-runs on setPath and clears isRenaming there.
           setPaneContent(tabId, leafId, { kind: "note", noteId: newPath });
           setPath(newPath);
+        } else {
+          isRenaming.current = false;
         }
         const finalTitle = titleFromFilename(basename(newPath));
         setTitle(finalTitle);
@@ -156,6 +167,7 @@ export function NoteTabContent({ noteId, tabId, leafId }: NoteTabContentProps) {
       } catch {
         // Rename refused (e.g. a name collision); resync the input to the
         // on-disk name and reload the tree so the UI reflects reality.
+        isRenaming.current = false;
         setTitle(titleFromFilename(basename(path)));
         void store.refresh();
       }

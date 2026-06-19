@@ -6,6 +6,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
+use notify::event::{EventKind, ModifyKind};
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, State};
@@ -27,11 +28,25 @@ fn build_watcher(app: &AppHandle, dir: &Path) -> Result<RecommendedWatcher, Stri
             Ok(event) => event,
             Err(_) => return,
         };
+        // Only react to content/structure changes. Skipping access events is
+        // essential: reloading a note reads its file, which would otherwise
+        // emit an access event and reload again in a loop. Metadata-only
+        // changes (mtime/atime touches) would cause spurious reloads too.
+        let interesting = matches!(
+            event.kind,
+            EventKind::Create(_) | EventKind::Remove(_) | EventKind::Modify(_)
+        ) && !matches!(event.kind, EventKind::Modify(ModifyKind::Metadata(_)));
+        if !interesting {
+            return;
+        }
         let paths: Vec<String> = event
             .paths
             .iter()
             .filter_map(|p| p.to_str().map(str::to_string))
             .collect();
+        if paths.is_empty() {
+            return;
+        }
         let _ = app_cb.emit(NOTES_CHANGED_EVENT, NotesChanged { paths });
     })
     .map_err(|e| e.to_string())?;

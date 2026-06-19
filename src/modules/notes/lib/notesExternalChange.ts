@@ -27,14 +27,21 @@ export interface ExternalChangeInput {
   selfWriteWindowMs: number;
 }
 
+// Compare paths separator-agnostically so a watcher path using Windows
+// backslashes still matches a note path built with forward slashes.
+function normalize(path: string): string {
+  return path.replace(/\\/g, "/");
+}
+
 export function decideExternalChange(input: ExternalChangeInput): ExternalChangeAction {
   const { notePath, changedPaths, dirty, selfWrite, now, selfWriteWindowMs } = input;
-  if (!changedPaths.includes(notePath)) {
+  const note = normalize(notePath);
+  if (!changedPaths.some((p) => normalize(p) === note)) {
     return "ignore";
   }
   if (
     selfWrite &&
-    selfWrite.path === notePath &&
+    normalize(selfWrite.path) === note &&
     now - selfWrite.at < selfWriteWindowMs
   ) {
     return "ignore";

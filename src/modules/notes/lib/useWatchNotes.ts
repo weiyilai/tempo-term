@@ -18,10 +18,14 @@ export function useWatchNotes(): void {
   useEffect(() => {
     if (!folder) {
       void useNotesStore.getState().setRoot(null);
+      void stopNotesWatch().catch(() => {});
       return;
     }
 
     void useNotesStore.getState().setRoot(folder);
+    // startNotesWatch replaces any previous watcher, so we don't stop the old
+    // one on cleanup: doing so is async and could race the next start and clear
+    // the new watcher. The watcher is stopped only when the folder is cleared.
     void startNotesWatch(folder).catch(() => {});
 
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -49,7 +53,6 @@ export function useWatchNotes(): void {
         clearTimeout(timer);
       }
       unlisten?.();
-      void stopNotesWatch().catch(() => {});
     };
   }, [folder]);
 }

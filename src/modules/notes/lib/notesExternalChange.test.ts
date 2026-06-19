@@ -50,4 +50,23 @@ describe("decideExternalChange", () => {
       }),
     ).toBe("prompt");
   });
+
+  it("reacts when the note's path is one of several changed paths", () => {
+    expect(
+      decideExternalChange({
+        ...base,
+        changedPaths: ["/root/b.md", "/root/a.md", "/root/c.md"],
+      }),
+    ).toBe("reload");
+  });
+
+  it("matches across path-separator styles (Windows backslashes)", () => {
+    expect(
+      decideExternalChange({
+        ...base,
+        notePath: "C:/notes/a.md",
+        changedPaths: ["C:\\notes\\a.md"],
+      }),
+    ).toBe("reload");
+  });
 });
