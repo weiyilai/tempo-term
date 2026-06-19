@@ -128,4 +128,48 @@ describe("createNormalizer", () => {
     expect(normalizer.push('{"type":"assistant","message"')).toEqual([]);
     expect(normalizer.push("")).toEqual([]);
   });
+
+  it("emits a todo event (not tool:start) when TodoWrite is called", () => {
+    const normalizer = createNormalizer();
+    const line = JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_t",
+            name: "TodoWrite",
+            input: {
+              todos: [
+                { content: "補 todo 事件", status: "in_progress", activeForm: "補 todo 事件" },
+                { content: "接 UI", status: "pending", activeForm: "接 UI" },
+              ],
+            },
+          },
+        ],
+      },
+    });
+
+    expect(normalizer.push(line)).toEqual([
+      {
+        kind: "todo",
+        items: [
+          { text: "補 todo 事件", status: "in_progress" },
+          { text: "接 UI", status: "pending" },
+        ],
+      },
+    ]);
+  });
+
+  it("emits idle when a stop-hook summary marks the turn finished", () => {
+    const normalizer = createNormalizer();
+    const line = JSON.stringify({
+      type: "system",
+      subtype: "stop_hook_summary",
+      stopReason: "",
+      toolUseID: "300988af-6dde-4fc2-9c06-1e833d528587",
+    });
+
+    expect(normalizer.push(line)).toEqual([{ kind: "idle" }]);
+  });
 });

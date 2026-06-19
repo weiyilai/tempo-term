@@ -26,6 +26,12 @@ function formatEvent(event: ProgressEvent): string {
       const secs = (event.durationMs / 1000).toFixed(1);
       return `${event.ok ? "✓" : "✗"} subagent ${event.agentType}  ${secs}s  ${event.tokens} tok  ${event.toolUseCount} tools`;
     }
+    case "todo": {
+      const done = event.items.filter((item) => item.status === "completed").length;
+      return `☑ todo     ${done}/${event.items.length} done`;
+    }
+    case "idle":
+      return `… idle     (waiting for input)`;
   }
 }
 

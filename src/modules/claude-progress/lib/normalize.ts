@@ -5,6 +5,11 @@
  * tool call with its later result), but callers only ever see the events.
  */
 
+export interface TodoItem {
+  text: string;
+  status: string;
+}
+
 export type ProgressEvent =
   | { kind: "tool:start"; id: string; name: string }
   | { kind: "tool:end"; id: string; name: string; ok: boolean }
@@ -17,7 +22,14 @@ export type ProgressEvent =
       durationMs: number;
       tokens: number;
       toolUseCount: number;
-    };
+    }
+  | { kind: "todo"; items: TodoItem[] }
+  | { kind: "idle" };
+
+interface RawTodo {
+  content?: string;
+  status?: string;
+}
 
 interface RawContentItem {
   type?: string;
@@ -25,7 +37,11 @@ interface RawContentItem {
   name?: string;
   tool_use_id?: string;
   is_error?: boolean;
-  input?: { description?: string; subagent_type?: string };
+  input?: {
+    description?: string;
+    subagent_type?: string;
+    todos?: RawTodo[];
+  };
 }
 
 interface RawToolUseResult {
@@ -38,6 +54,7 @@ interface RawToolUseResult {
 
 interface RawLine {
   type?: string;
+  subtype?: string;
   message?: { content?: RawContentItem[] };
   toolUseResult?: RawToolUseResult | null;
 }
@@ -59,8 +76,16 @@ export function createNormalizer(): Normalizer {
         // Watcher tails may hand us a half-written or empty line; skip it.
         return [];
       }
-      const content = record.message?.content;
       const events: ProgressEvent[] = [];
+
+      if (record.type === "system") {
+        if (record.subtype === "stop_hook_summary") {
+          events.push({ kind: "idle" });
+        }
+        return events;
+      }
+
+      const content = record.message?.content;
       if (!content) {
         return events;
       }
@@ -76,6 +101,14 @@ export function createNormalizer(): Normalizer {
               id: item.id,
               agentType: item.input?.subagent_type ?? "",
               description: item.input?.description ?? "",
+            });
+          } else if (item.name === "TodoWrite") {
+            events.push({
+              kind: "todo",
+              items: (item.input?.todos ?? []).map((todo) => ({
+                text: todo.content ?? "",
+                status: todo.status ?? "",
+              })),
             });
           } else {
             toolNames.set(item.id, item.name);
