@@ -81,8 +81,8 @@ function SessionBody({ progress }: { progress: ProgressState }) {
           <h4 className="text-[11px] font-medium uppercase tracking-wide text-fg-subtle">
             Todo（{todos.filter((t) => t.status === "completed").length}/{todos.length}）
           </h4>
-          {todos.map((item, index) => (
-            <TodoRow key={index} item={item} />
+          {todos.map((item) => (
+            <TodoRow key={item.text} item={item} />
           ))}
         </section>
       )}

@@ -74,13 +74,31 @@ export function reduceProgress(state: ProgressState, event: ProgressEvent): Prog
             : sub,
         ),
       };
-    case "todo":
+    case "todo": {
+      // Transcript appends often re-emit an unchanged todo list. Returning the
+      // same reference when nothing changed lets the store short-circuit instead
+      // of rewriting sessions and re-rendering on every append.
+      if (state.idle === false && todosEqual(state.todos, event.items)) {
+        return state;
+      }
       return { ...state, idle: false, todos: event.items };
+    }
     case "idle":
+      if (state.idle) {
+        return state;
+      }
       return { ...state, idle: true };
     default:
       return state;
   }
+}
+
+/** True when two todo lists have the same items, in the same order, by content. */
+function todosEqual(a: TodoItem[], b: TodoItem[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  return a.every((item, index) => item.text === b[index].text && item.status === b[index].status);
 }
 
 export type { TodoItem };
