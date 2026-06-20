@@ -21,7 +21,7 @@ use modules::git::{
     git_branches, git_cherry_pick, git_commit, git_commit_details, git_commit_file_diff, git_diff,
     git_fetch, git_graph_log, git_log, git_merge, git_pull, git_push, git_push_delete, git_rebase,
     git_reset, git_resolve_repo, git_revert, git_stage, git_status, git_tag_create, git_tag_delete,
-    git_unstage,
+    git_unstage, git_worktree_info,
 };
 use modules::secrets::{secrets_delete_key, secrets_has_key, secrets_set_key};
 use modules::pty::{
@@ -117,6 +117,7 @@ pub fn run() {
             fs_reveal,
             git_resolve_repo,
             git_status,
+            git_worktree_info,
             git_stage,
             git_unstage,
             git_commit,
