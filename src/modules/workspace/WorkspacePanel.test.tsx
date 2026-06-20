@@ -6,6 +6,7 @@ import { useTabsStore } from "@/stores/tabsStore";
 import { leaf } from "@/modules/terminal/lib/terminalLayout";
 import { useProgressStore } from "@/modules/claude-progress/lib/progressStore";
 import { emptyProgressState, reduceProgress } from "@/modules/claude-progress/lib/progressState";
+import { useWorktreeStore } from "./lib/worktreeStore";
 
 function activeSession() {
   return reduceProgress(emptyProgressState(), { kind: "tool:start", id: "t1", name: "Bash" });
@@ -13,6 +14,7 @@ function activeSession() {
 
 beforeEach(() => {
   useProgressStore.setState({ sessions: {} });
+  useWorktreeStore.setState({ infos: {} });
   useTabsStore.setState({
     spaces: [{ id: "s1", name: "Salon" }],
     activeSpaceId: "s1",
@@ -88,5 +90,34 @@ describe("WorkspacePanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "All" }));
     expect(screen.getByText("alpha")).toBeInTheDocument();
     expect(screen.getByText("beta")).toBeInTheDocument();
+  });
+
+  it("shows a single branch line for a normal repo card", () => {
+    useWorktreeStore.setState({
+      infos: {
+        "/a": { branch: "main", cwd: "/a", isWorktree: false, mainBranch: null, mainPath: null },
+      },
+    });
+    render(<WorkspacePanel />);
+    const card = screen.getByRole("button", { name: /alpha/ });
+    expect(within(card).getByText("main")).toBeInTheDocument();
+  });
+
+  it("shows main and worktree branch lines for a worktree card", () => {
+    useWorktreeStore.setState({
+      infos: {
+        "/b": {
+          branch: "feature",
+          cwd: "/b",
+          isWorktree: true,
+          mainBranch: "main",
+          mainPath: "/main",
+        },
+      },
+    });
+    render(<WorkspacePanel />);
+    const card = screen.getByRole("button", { name: /beta/ });
+    expect(within(card).getByText("main")).toBeInTheDocument();
+    expect(within(card).getByText("feature")).toBeInTheDocument();
   });
 });

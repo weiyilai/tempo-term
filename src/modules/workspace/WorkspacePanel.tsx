@@ -17,6 +17,9 @@ import { useTabsStore, type Tab, type TabKind } from "@/stores/tabsStore";
 import { useProgressStore } from "@/modules/claude-progress/lib/progressStore";
 import { deriveStatus } from "@/modules/claude-progress/lib/progressState";
 import { deriveTabCwd } from "./lib/tabCwd";
+import { useWorktreeStore } from "./lib/worktreeStore";
+import { useWorktreeInfos } from "./lib/useWorktreeInfos";
+import type { WorktreeInfo } from "./lib/worktreeBridge";
 
 function tabIcon(kind: TabKind): LucideIcon {
   switch (kind) {
@@ -66,13 +69,47 @@ function StatusBadge({ status }: { status: ClaudeStatus }) {
   );
 }
 
+function BranchLine({ branch, path }: { branch: string | null; path: string | null }) {
+  return (
+    <span className="flex items-center gap-1 text-[11px] text-fg-subtle">
+      <GitBranch size={11} className="shrink-0" />
+      {branch && <span className="shrink-0 text-fg-muted">{branch}</span>}
+      {path && <span className="min-w-0 truncate">{path}</span>}
+    </span>
+  );
+}
+
+/**
+ * The branch/cwd block under a card title. A linked worktree shows two lines
+ * (main repo, then worktree); a normal repo shows one. Before info loads, it
+ * falls back to the plain cwd.
+ */
+function BranchBlock({ info, cwd }: { info: WorktreeInfo | undefined; cwd: string | null }) {
+  if (!info) {
+    return cwd ? (
+      <span className="block truncate text-[11px] text-fg-subtle">{cwd}</span>
+    ) : null;
+  }
+  if (info.isWorktree) {
+    return (
+      <span className="block space-y-0.5">
+        <BranchLine branch={info.mainBranch} path={info.mainPath} />
+        <BranchLine branch={info.branch} path={info.cwd} />
+      </span>
+    );
+  }
+  return <BranchLine branch={info.branch} path={info.cwd} />;
+}
+
 function TabCard({ tab }: { tab: Tab }) {
   const activeId = useTabsStore((s) => s.activeId);
   const setActive = useTabsStore((s) => s.setActive);
   const sessions = useProgressStore((s) => s.sessions);
+  const infos = useWorktreeStore((s) => s.infos);
   const active = tab.id === activeId;
   const cwd = deriveTabCwd(tab);
   const status = tabClaudeStatus(tab, sessions);
+  const info = cwd ? infos[cwd] : undefined;
   const Icon = tabIcon(tab.kind);
 
   return (
@@ -91,7 +128,7 @@ function TabCard({ tab }: { tab: Tab }) {
           <span className="min-w-0 flex-1 truncate text-xs font-medium text-fg">{tab.title}</span>
           {status && <StatusBadge status={status} />}
         </span>
-        {cwd && <span className="block truncate text-[11px] text-fg-subtle">{cwd}</span>}
+        <BranchBlock info={info} cwd={cwd} />
       </span>
     </button>
   );
@@ -144,8 +181,14 @@ function SpaceGroup({ id, name, filter }: { id: string; name: string; filter: St
 export function WorkspacePanel() {
   const { t } = useTranslation();
   const spaces = useTabsStore((s) => s.spaces);
+  const tabs = useTabsStore((s) => s.tabs);
   const newSpace = useTabsStore((s) => s.newSpace);
   const [filter, setFilter] = useState<StatusFilter>("all");
+
+  const cwds = tabs
+    .map((tab) => deriveTabCwd(tab))
+    .filter((cwd): cwd is string => cwd !== null);
+  useWorktreeInfos(cwds);
 
   return (
     <div className="flex h-full w-full flex-col overflow-hidden">
