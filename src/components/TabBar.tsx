@@ -33,6 +33,12 @@ import { useEditorStore } from "@/modules/editor/store/editorStore";
 import { useUiStore } from "@/stores/uiStore";
 import { SpaceDropdown } from "./SpaceDropdown";
 
+// Module-level so the reference stays stable across renders. Passing an inline
+// options object would make useSensor/useSensors return a new sensors array on
+// every render, re-initializing the sensor managers (a re-render is triggered
+// mid-drag when draggingId updates).
+const POINTER_SENSOR_OPTIONS = { activationConstraint: { distance: 5 } };
+
 function tabIcon(kind: Tab["kind"]): LucideIcon {
   switch (kind) {
     case "terminal":
@@ -163,9 +169,7 @@ export function TabBar() {
   const sidebarVisible = useUiStore((s) => s.sidebarVisible);
   const reorderTab = useTabsStore((s) => s.reorderTab);
   const [draggingId, setDraggingId] = useState<string | null>(null);
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  );
+  const sensors = useSensors(useSensor(PointerSensor, POINTER_SENSOR_OPTIONS));
   const draggingTab = visibleTabs.find((tab) => tab.id === draggingId);
 
   function handleDragStart(event: DragStartEvent) {
