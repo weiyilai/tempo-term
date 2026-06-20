@@ -63,6 +63,21 @@ describe("WorkspacePanel", () => {
     expect(useTabsStore.getState().activeId).toBe("t2");
   });
 
+  it("renames a workspace from the panel", () => {
+    render(<WorkspacePanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Rename space" }));
+    const input = screen.getByDisplayValue("Salon");
+    fireEvent.change(input, { target: { value: "Studio" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(useTabsStore.getState().spaces[0].name).toBe("Studio");
+  });
+
+  it("deletes a workspace from the panel", () => {
+    render(<WorkspacePanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Delete space" }));
+    expect(useTabsStore.getState().spaces.find((s) => s.id === "s1")).toBeUndefined();
+  });
+
   it("collapses a workspace group to hide its cards", () => {
     render(<WorkspacePanel />);
     fireEvent.click(screen.getByRole("button", { name: /Salon/ }));

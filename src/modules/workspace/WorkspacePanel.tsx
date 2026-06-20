@@ -10,8 +10,10 @@ import {
   GitPullRequest,
   Globe,
   LayoutGrid,
+  Pencil,
   Plus,
   SquareTerminal,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { useTabsStore, type Tab, type TabKind } from "@/stores/tabsStore";
@@ -206,9 +208,14 @@ function TabCard({ tab }: { tab: Tab }) {
 }
 
 function SpaceGroup({ id, name, filter }: { id: string; name: string; filter: StatusFilter }) {
+  const { t } = useTranslation();
   const sessions = useProgressStore((s) => s.sessions);
   const setActiveSpace = useTabsStore((s) => s.setActiveSpace);
+  const renameSpace = useTabsStore((s) => s.renameSpace);
+  const deleteSpace = useTabsStore((s) => s.deleteSpace);
   const [collapsed, setCollapsed] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
   const tabs = useTabsStore((s) => s.tabs)
     .filter((t) => t.spaceId === id)
     .filter((t) => filter === "all" || tabClaudeStatus(t, sessions) === filter);
@@ -218,25 +225,75 @@ function SpaceGroup({ id, name, filter }: { id: string; name: string; filter: St
     return null;
   }
 
+  function commitRename() {
+    if (draft.trim()) {
+      renameSpace(id, draft.trim());
+    }
+    setEditing(false);
+  }
+
   return (
     <section className="space-y-1.5">
-      <button
-        type="button"
-        onClick={() => {
-          setActiveSpace(id);
-          setCollapsed((c) => !c);
-        }}
-        className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left hover:bg-bg-elevated"
-      >
+      <div className="group flex items-center gap-1 rounded-md px-1.5 py-1 hover:bg-bg-elevated">
         {collapsed ? (
           <ChevronRight size={13} className="shrink-0 text-fg-subtle" />
         ) : (
           <ChevronDown size={13} className="shrink-0 text-fg-subtle" />
         )}
         <Folder size={14} className="shrink-0 text-fg-subtle" />
-        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-fg">{name}</span>
-        <span className="shrink-0 text-[11px] text-fg-subtle">{tabs.length}</span>
-      </button>
+
+        {editing ? (
+          <input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commitRename();
+              if (e.key === "Escape") setEditing(false);
+            }}
+            className="min-w-0 flex-1 rounded border border-accent bg-bg px-1 text-xs text-fg outline-none"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => {
+              setActiveSpace(id);
+              setCollapsed((c) => !c);
+            }}
+            className="min-w-0 flex-1 truncate text-left text-xs font-semibold text-fg"
+          >
+            {name}
+          </button>
+        )}
+
+        {!editing && (
+          <>
+            <span className="shrink-0 text-[11px] text-fg-subtle">{tabs.length}</span>
+            <button
+              type="button"
+              aria-label={t("workspace.renameSpace")}
+              title={t("workspace.renameSpace")}
+              onClick={() => {
+                setDraft(name);
+                setEditing(true);
+              }}
+              className="shrink-0 rounded p-0.5 text-fg-subtle opacity-0 transition-opacity hover:text-fg group-hover:opacity-100"
+            >
+              <Pencil size={12} />
+            </button>
+            <button
+              type="button"
+              aria-label={t("workspace.deleteSpace")}
+              title={t("workspace.deleteSpace")}
+              onClick={() => deleteSpace(id)}
+              className="shrink-0 rounded p-0.5 text-fg-subtle opacity-0 transition-opacity hover:text-danger group-hover:opacity-100"
+            >
+              <Trash2 size={12} />
+            </button>
+          </>
+        )}
+      </div>
 
       {!collapsed && (
         <div className="space-y-1.5 pl-2">
