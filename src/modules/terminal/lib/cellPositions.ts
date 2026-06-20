@@ -64,3 +64,71 @@ export function buildCellPositions(rows: TerminalRow[]): CellPositions {
 
   return { text, spans };
 }
+
+/** Minimal structural view of the xterm buffer this module reads. */
+export interface TerminalBufferCell {
+  getChars(): string;
+  getWidth(): number;
+}
+
+export interface TerminalBufferLine {
+  isWrapped: boolean;
+  length: number;
+  getCell(column: number, cell?: TerminalBufferCell): TerminalBufferCell | undefined;
+}
+
+export interface TerminalBuffer {
+  /** 0-based line lookup, matching xterm's buffer.getLine. */
+  getLine(line: number): TerminalBufferLine | undefined;
+}
+
+/**
+ * Resolve the logical line that contains the given 1-based row and read its
+ * cells into rows. xterm queries link providers per viewport row, so a path
+ * that wraps must be found whether the click lands on its first row or a
+ * wrapped continuation row. We walk up to the logical start, then down through
+ * every wrapped continuation, so each row of the path returns the same rows.
+ */
+export function gatherLogicalLine(
+  buffer: TerminalBuffer,
+  lineNumber: number,
+): TerminalRow[] | null {
+  let startRow = lineNumber;
+  for (;;) {
+    const line = buffer.getLine(startRow - 1);
+    if (!line) {
+      return null;
+    }
+    if (!line.isWrapped || startRow <= 1) {
+      break;
+    }
+    startRow -= 1;
+  }
+
+  const rows: TerminalRow[] = [];
+  let y = startRow;
+  let line: TerminalBufferLine | undefined = buffer.getLine(startRow - 1);
+  while (line) {
+    const cells: TerminalCell[] = [];
+    // Reuse one cell object across columns; xterm fills it in place to avoid
+    // allocating per cell. We copy out chars/width immediately, so the reuse
+    // never aliases pushed entries.
+    let cell: TerminalBufferCell | undefined;
+    for (let col = 0; col < line.length; col += 1) {
+      cell = line.getCell(col, cell);
+      cells.push({
+        chars: cell?.getChars() ?? "",
+        width: cell?.getWidth() ?? 1,
+      });
+    }
+    rows.push({ y, cells });
+    const next = buffer.getLine(y);
+    if (!next || !next.isWrapped) {
+      break;
+    }
+    line = next;
+    y += 1;
+  }
+
+  return rows;
+}
