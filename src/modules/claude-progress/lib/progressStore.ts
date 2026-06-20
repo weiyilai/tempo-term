@@ -5,10 +5,6 @@ import { emptyProgressState, reduceProgress, type ProgressState } from "./progre
 interface ProgressStoreState {
   /** Accumulated progress per watched project directory (keyed by cwd). */
   sessions: Record<string, ProgressState>;
-  /** Whether the floating progress panel is expanded. */
-  panelOpen: boolean;
-  setPanelOpen: (open: boolean) => void;
-  togglePanel: () => void;
   /**
    * Feed raw transcript lines (from the backend watcher) for one cwd. `reset`
    * marks the first batch of a newly started session, clearing prior progress.
@@ -33,10 +29,6 @@ function normalizerFor(cwd: string): Normalizer {
 
 export const useProgressStore = create<ProgressStoreState>((set) => ({
   sessions: {},
-  panelOpen: false,
-
-  setPanelOpen: (panelOpen) => set({ panelOpen }),
-  togglePanel: () => set((state) => ({ panelOpen: !state.panelOpen })),
 
   pushLines: (cwd, lines, reset) =>
     set((state) => {

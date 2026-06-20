@@ -6,8 +6,8 @@ import { totalActiveCount, useProgressStore } from "@/modules/claude-progress/li
 export function StatusBar() {
   const { t } = useTranslation();
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
+  const selectSidebar = useUiStore((s) => s.selectSidebar);
   const sessions = useProgressStore((s) => s.sessions);
-  const togglePanel = useProgressStore((s) => s.togglePanel);
   const count = totalActiveCount(sessions);
   const active = count > 0;
 
@@ -24,7 +24,7 @@ export function StatusBar() {
           type="button"
           title="Claude 進度"
           aria-label="Claude 進度"
-          onClick={togglePanel}
+          onClick={() => selectSidebar("workspaces")}
           className={`relative flex h-5 w-6 items-center justify-center rounded transition-colors ${
             active ? "text-accent" : "text-fg-subtle hover:text-fg"
           }`}
