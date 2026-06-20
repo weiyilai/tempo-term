@@ -32,8 +32,8 @@ import {
   shouldAttachImage,
   shellQuotePath,
 } from "./lib/terminalClipboard";
-import { findFilePaths, resolveFilePath } from "./lib/fileLinks";
-import { buildCellPositions, type TerminalRow } from "./lib/cellPositions";
+import { buildFileLink, findFilePaths, resolveFilePath } from "./lib/fileLinks";
+import { buildCellPositions, gatherLogicalLine } from "./lib/cellPositions";
 import { terminalKeySequence } from "./lib/terminalKeymap";
 import { shouldCdToRoot } from "./lib/cwdSync";
 import { debounce } from "@/lib/debounce";
@@ -41,8 +41,7 @@ import { dropOverlayClassName } from "@/components/EntryDropOverlay";
 import { fsHomeDir, fsReadFile } from "@/modules/explorer/lib/fsBridge";
 import { getDraggedEntry } from "@/modules/explorer/lib/dragEntry";
 
-const IS_MAC =
-  typeof navigator !== "undefined" && navigator.platform.toLowerCase().includes("mac");
+import { IS_MAC, openModifierLabel } from "@/lib/platform";
 import { selectTerminalFontFamily, useFontStore } from "@/stores/fontStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -103,8 +102,8 @@ export function TerminalView({
   const onOpenFileRef = useRef(onOpenFile);
   onOpenFileRef.current = onOpenFile;
   const { t } = useTranslation();
-  const linkHintRef = useRef(t("openLinkHint"));
-  linkHintRef.current = t("openLinkHint");
+  const linkHintRef = useRef(t("openLinkHint", { mods: openModifierLabel(IS_MAC) }));
+  linkHintRef.current = t("openLinkHint", { mods: openModifierLabel(IS_MAC) });
 
   const fontFamily = useFontStore(selectTerminalFontFamily);
   const fontSize = useFontStore((s) => s.fontSize);
@@ -301,42 +300,13 @@ export function TerminalView({
 
     term.registerLinkProvider({
       provideLinks(lineNumber, callback) {
-        const buffer = term.buffer.active;
-        const firstLine = buffer.getLine(lineNumber - 1);
-        // Only handle a logical line at its first row; wrapped continuation rows
-        // are covered by the multi-row range built below.
-        if (!firstLine || firstLine.isWrapped) {
+        // Resolve the logical line (handles wrapped paths) and read its cells.
+        const rows = gatherLogicalLine(term.buffer.active, lineNumber);
+        if (!rows) {
           callback(undefined);
           return;
         }
-        // Gather the logical line: this row plus any wrapped continuation rows,
-        // so a path that wraps across rows is still detected as one link. Read
-        // the actual buffer cells (not translateToString) so column math stays
-        // in sync with xterm's own widths for wide / CJK glyphs.
-        const cellRows: TerminalRow[] = [];
-        let y = lineNumber;
-        let line: typeof firstLine | undefined = firstLine;
-        while (line) {
-          const cells: TerminalRow["cells"] = [];
-          // Reuse one cell object across columns; xterm fills it in place to
-          // avoid allocating per cell.
-          let cell: ReturnType<typeof line.getCell>;
-          for (let col = 0; col < line.length; col += 1) {
-            cell = line.getCell(col, cell);
-            cells.push({
-              chars: cell?.getChars() ?? "",
-              width: cell?.getWidth() ?? 1,
-            });
-          }
-          cellRows.push({ y, cells });
-          const next = buffer.getLine(y);
-          if (!next || !next.isWrapped) {
-            break;
-          }
-          line = next;
-          y += 1;
-        }
-        const { text, spans } = buildCellPositions(cellRows);
+        const { text, spans } = buildCellPositions(rows);
         const matches = findFilePaths(text);
         if (matches.length === 0) {
           callback(undefined);
@@ -354,17 +324,15 @@ export function TerminalView({
           return { x: span?.endX ?? 1, y: span?.y ?? lineNumber };
         };
         callback(
-          matches.map((m) => ({
-            range: { start: startCell(m.start), end: endCell(m.end - 1) },
-            text: m.text,
-            activate: (event: MouseEvent) => {
-              // Alt+click is xterm's rectangular-select gesture and can be
-              // swallowed, so Cmd+click works too (matching VS Code's gesture).
-              if (event.altKey || event.metaKey) {
-                void openFromTerminal(m.text);
-              }
-            },
-          })),
+          matches.map((m) =>
+            buildFileLink({
+              text: m.text,
+              range: { start: startCell(m.start), end: endCell(m.end - 1) },
+              hint: linkHintRef.current,
+              isMac: IS_MAC,
+              onOpen: (raw) => void openFromTerminal(raw),
+            }),
+          ),
         );
       },
     });

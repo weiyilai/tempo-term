@@ -5,6 +5,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { buildTerminalFontFamily } from "@/modules/fonts/lib/fontChain";
 import { isWebUrl } from "@/lib/url";
+import { IS_MAC, matchesOpenModifier } from "@/lib/platform";
 import { hideLinkTooltip, showLinkTooltip } from "./linkTooltip";
 import "@xterm/xterm/css/xterm.css";
 
@@ -52,7 +53,7 @@ export function createTerminal(options: CreateTerminalOptions = {}): TerminalHan
   term.loadAddon(
     new WebLinksAddon(
       (event, uri) => {
-        if ((event.metaKey || event.ctrlKey || event.altKey) && isWebUrl(uri)) {
+        if (matchesOpenModifier(event, IS_MAC) && isWebUrl(uri)) {
           void openUrl(uri);
         }
       },

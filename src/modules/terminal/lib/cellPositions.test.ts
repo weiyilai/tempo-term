@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildCellPositions, type TerminalRow } from "./cellPositions";
+import { gatherLogicalLine, type TerminalBufferLine } from "./cellPositions";
 
 /** Build a row of single-width ASCII cells from a plain string. */
 function asciiRow(y: number, text: string): TerminalRow {
@@ -61,5 +62,55 @@ describe("buildCellPositions", () => {
     // First char of the second row restarts at column 1 on line 5.
     expect(spans[2]).toEqual({ startX: 1, endX: 1, y: 5 });
     expect(spans[3]).toEqual({ startX: 2, endX: 2, y: 5 });
+  });
+});
+
+function fakeLine(text: string, isWrapped: boolean): TerminalBufferLine {
+  const chars = [...text];
+  return {
+    isWrapped,
+    length: chars.length,
+    getCell: (col: number) => ({
+      getChars: () => chars[col] ?? "",
+      getWidth: () => 1,
+    }),
+  };
+}
+
+function fakeBuffer(lines: TerminalBufferLine[]) {
+  return { getLine: (i: number) => lines[i] };
+}
+
+describe("gatherLogicalLine", () => {
+  it("returns a single row for a non-wrapped line", () => {
+    const buffer = fakeBuffer([fakeLine("abc", false)]);
+    const rows = gatherLogicalLine(buffer, 1);
+    expect(rows).not.toBeNull();
+    expect(rows).toHaveLength(1);
+    expect(rows?.[0].y).toBe(1);
+    expect(rows?.[0].cells.map((c) => c.chars).join("")).toBe("abc");
+  });
+
+  it("returns the whole logical line when asked for the first row", () => {
+    const buffer = fakeBuffer([
+      fakeLine("/long/", false),
+      fakeLine("end.md", true),
+    ]);
+    const rows = gatherLogicalLine(buffer, 1);
+    expect(rows?.map((r) => r.y)).toEqual([1, 2]);
+  });
+
+  it("returns the whole logical line when asked for a wrapped continuation row", () => {
+    const buffer = fakeBuffer([
+      fakeLine("/long/", false),
+      fakeLine("end.md", true),
+    ]);
+    const rows = gatherLogicalLine(buffer, 2);
+    expect(rows?.map((r) => r.y)).toEqual([1, 2]);
+  });
+
+  it("returns null when the row does not exist", () => {
+    const buffer = fakeBuffer([fakeLine("abc", false)]);
+    expect(gatherLogicalLine(buffer, 5)).toBeNull();
   });
 });
