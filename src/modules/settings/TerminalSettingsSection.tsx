@@ -41,6 +41,23 @@ export function TerminalSettingsSection() {
         />
       </div>
 
+      {/* Live preview: an inner box inset by the chosen padding, in terminal
+          colours. Sits right under the slider it previews. */}
+      <div className="mb-6">
+        <div className="mb-2 text-xs text-fg-subtle">{t("terminalSettings.preview")}</div>
+        <div
+          className="overflow-hidden rounded-lg border border-border"
+          style={{ backgroundColor: terminal.background, padding: terminalPadding }}
+        >
+          <pre
+            className="m-0 font-mono text-xs leading-relaxed"
+            style={{ color: terminal.foreground }}
+          >
+            {t("terminalSettings.previewText")}
+          </pre>
+        </div>
+      </div>
+
       <div className="mb-6">
         <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-fg">
           <input
@@ -64,22 +81,6 @@ export function TerminalSettingsSection() {
         >
           {cleared ? t("terminalSettings.historyCleared") : t("terminalSettings.clearHistory")}
         </button>
-      </div>
-
-      {/* Live preview: an inner box inset by the chosen padding, in terminal colours */}
-      <div>
-        <div className="mb-2 text-xs text-fg-subtle">{t("terminalSettings.preview")}</div>
-        <div
-          className="overflow-hidden rounded-lg border border-border"
-          style={{ backgroundColor: terminal.background, padding: terminalPadding }}
-        >
-          <pre
-            className="m-0 font-mono text-xs leading-relaxed"
-            style={{ color: terminal.foreground }}
-          >
-            {t("terminalSettings.previewText")}
-          </pre>
-        </div>
       </div>
     </section>
   );
