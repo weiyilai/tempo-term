@@ -3,6 +3,7 @@
 //! OS keychain. Either may be unavailable; callers treat a None result as
 //! "nothing to show" and degrade gracefully.
 
+use std::path::PathBuf;
 use std::process::Command;
 
 use serde::Serialize;
@@ -101,10 +102,41 @@ fn remote_origin_url(cwd: &str) -> Option<String> {
     remote.url().map(str::to_string)
 }
 
-/// Whether the `gh` CLI is available on PATH.
+/// Directories to search for a CLI binary. A GUI launch (Finder/Dock) hands the
+/// app a minimal PATH that omits Homebrew and other user install dirs, so we
+/// append the usual locations. Pure so it can be tested without the real env.
+fn cli_search_dirs(path_env: Option<&str>, home: Option<&str>) -> Vec<PathBuf> {
+    let mut dirs: Vec<PathBuf> = match path_env {
+        Some(path) => std::env::split_paths(path).collect(),
+        None => Vec::new(),
+    };
+    for extra in ["/opt/homebrew/bin", "/usr/local/bin", "/opt/local/bin"] {
+        dirs.push(PathBuf::from(extra));
+    }
+    if let Some(home) = home {
+        dirs.push(PathBuf::from(home).join(".local").join("bin"));
+    }
+    dirs
+}
+
+/// Absolute path to the `gh` binary, searching PATH plus the common install
+/// dirs a GUI launch drops, or None when it isn't installed.
+fn find_gh() -> Option<PathBuf> {
+    let path_env = std::env::var("PATH").ok();
+    let home = std::env::var("HOME").ok();
+    cli_search_dirs(path_env.as_deref(), home.as_deref())
+        .into_iter()
+        .map(|dir| dir.join("gh"))
+        .find(|candidate| candidate.is_file())
+}
+
+/// Whether the `gh` CLI is available.
 #[tauri::command]
 pub fn gh_available() -> bool {
-    Command::new("gh")
+    let Some(gh) = find_gh() else {
+        return false;
+    };
+    Command::new(gh)
         .arg("--version")
         .output()
         .map(|o| o.status.success())
@@ -127,9 +159,12 @@ pub fn pr_via_gh(cwd: String, branch: Option<String>) -> Result<Option<PrInfo>, 
         args.push(&branch);
     }
     args.extend(["--json", "number,state,isDraft,url,title"]);
-    let output = match Command::new("gh").args(&args).current_dir(&cwd).output() {
+    // gh not installed: not an error, just nothing to show.
+    let Some(gh) = find_gh() else {
+        return Ok(None);
+    };
+    let output = match Command::new(gh).args(&args).current_dir(&cwd).output() {
         Ok(output) => output,
-        // gh not installed: not an error, just nothing to show.
         Err(_) => return Ok(None),
     };
     if !output.status.success() {
@@ -248,5 +283,24 @@ mod tests {
         assert_eq!(pr.number, 7);
         assert_eq!(pr.state, "merged");
         assert_eq!(pr.url, "https://github.com/o/r/pull/7");
+    }
+
+    #[test]
+    fn cli_search_dirs_adds_common_install_locations_to_a_minimal_path() {
+        // A GUI launch (Finder/Dock) hands the app a minimal PATH without
+        // Homebrew, so gh "isn't found" even when installed. The search must
+        // still cover the usual install dirs.
+        let dirs = cli_search_dirs(Some("/usr/bin:/bin"), Some("/Users/me"));
+        assert!(dirs.contains(&PathBuf::from("/usr/bin"))); // PATH entries kept
+        assert!(dirs.contains(&PathBuf::from("/opt/homebrew/bin"))); // Apple Silicon brew
+        assert!(dirs.contains(&PathBuf::from("/usr/local/bin"))); // Intel brew
+        assert!(dirs.contains(&PathBuf::from("/Users/me/.local/bin"))); // home bin
+    }
+
+    #[test]
+    fn cli_search_dirs_works_without_a_path_or_home() {
+        let dirs = cli_search_dirs(None, None);
+        assert!(dirs.contains(&PathBuf::from("/opt/homebrew/bin")));
+        assert!(!dirs.iter().any(|d| d.ends_with(".local/bin")));
     }
 }
