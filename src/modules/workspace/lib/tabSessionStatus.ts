@@ -15,7 +15,7 @@ export function tabSessionStatus(
 ): SessionStatus | null {
   const present = new Set<SessionStatus>();
   for (const pane of computeLayout(tab.paneTree)) {
-    if (pane.content.kind === "terminal") {
+    if (pane.content?.kind === "terminal") {
       const status = statuses[pane.id];
       if (status) {
         present.add(status);

@@ -146,8 +146,12 @@ pub fn claude_status_hook_install(app: AppHandle) -> Result<(), String> {
 pub fn claude_status_hook_uninstall(app: AppHandle) -> Result<(), String> {
     let (script_path, settings_path) = paths(&app)?;
     let script_str = script_path.to_str().ok_or("script path is not valid UTF-8")?;
-    let cleaned = remove_hook_settings(read_settings(&settings_path)?, script_str);
-    write_settings(&settings_path, &cleaned)?;
+    // Only rewrite settings.json if it already exists, so uninstalling never
+    // creates an empty `{}` file for a user who has no settings.
+    if settings_path.exists() {
+        let cleaned = remove_hook_settings(read_settings(&settings_path)?, script_str);
+        write_settings(&settings_path, &cleaned)?;
+    }
     let _ = std::fs::remove_file(&script_path);
     if let Some(dir) = script_path.parent() {
         let _ = std::fs::remove_dir(dir); // best-effort, only succeeds when empty

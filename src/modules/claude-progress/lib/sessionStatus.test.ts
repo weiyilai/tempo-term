@@ -42,4 +42,9 @@ describe("isClaudeForeground", () => {
     expect(isClaudeForeground(null)).toBe(false);
     expect(isClaudeForeground("")).toBe(false);
   });
+
+  it("does not match claude only appearing as an argument", () => {
+    expect(isClaudeForeground("vim claude.md")).toBe(false);
+    expect(isClaudeForeground("cat claude.log")).toBe(false);
+  });
 });
