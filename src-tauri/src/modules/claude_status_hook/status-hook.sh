@@ -4,6 +4,21 @@
 # slave) and write an OSC status sequence there. tempo-term's xterm parses it.
 # Only acts inside tempo-term, where the shell carries TEMPOTERM=1.
 [ -n "$TEMPOTERM" ] || exit 0
+
+# Most events pass their state directly as $1 (active/thinking/idle/...). The
+# Notification event is a catch-all keyed by notification_type, so it passes
+# "notification" and we read that type off the JSON on stdin and forward it; the
+# app decides what it means (a permission prompt is waiting-approval, an idle
+# prompt is just idle). An unknown or missing type emits nothing.
+state=$1
+if [ "$state" = "notification" ]; then
+  ntype=$(sed -n 's/.*"notification_type"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+  [ -n "$ntype" ] || exit 0
+  payload="tempoterm;notify;$ntype"
+else
+  payload="tempoterm;status;$state"
+fi
+
 p=$PPID
 tty=""
 for _ in 1 2 3 4 5 6 7 8; do
@@ -17,5 +32,5 @@ for _ in 1 2 3 4 5 6 7 8; do
   p=$(ps -o ppid= -p "$p" 2>/dev/null | tr -d ' ')
 done
 [ -n "$tty" ] || exit 0
-printf '\033]6973;tempoterm;status;%s\007' "$1" > "/dev/$tty" 2>/dev/null
+printf '\033]6973;%s\007' "$payload" > "/dev/$tty" 2>/dev/null
 exit 0

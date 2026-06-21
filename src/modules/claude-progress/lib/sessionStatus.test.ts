@@ -24,6 +24,28 @@ describe("parseStatusOsc", () => {
   it("ignores unknown states", () => {
     expect(parseStatusOsc("tempoterm;status;bogus")).toBeNull();
   });
+
+  it("maps a permission notification to waiting-approval", () => {
+    expect(parseStatusOsc("tempoterm;notify;permission_prompt")).toEqual({
+      kind: "status",
+      status: "waiting-approval",
+    });
+  });
+
+  it("maps an idle notification to idle, not waiting-approval", () => {
+    // The idle prompt means Claude is just waiting for the user's next message;
+    // it must not light the "waiting for approval" badge.
+    expect(parseStatusOsc("tempoterm;notify;idle_prompt")).toEqual({
+      kind: "status",
+      status: "idle",
+    });
+  });
+
+  it("ignores notification types that don't map to a session state", () => {
+    // e.g. auth_success / elicitation — these should never clobber the status.
+    expect(parseStatusOsc("tempoterm;notify;auth_success")).toBeNull();
+    expect(parseStatusOsc("tempoterm;notify;")).toBeNull();
+  });
 });
 
 describe("isClaudeForeground", () => {
