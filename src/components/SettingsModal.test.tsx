@@ -28,10 +28,9 @@ describe("SettingsModal", () => {
   });
 
   it("closes when the backdrop behind the panel is clicked", () => {
-    const { container } = render(<SettingsModal />);
+    render(<SettingsModal />);
 
-    // The outermost element is the dimmed backdrop.
-    fireEvent.click(container.firstChild as HTMLElement);
+    fireEvent.click(screen.getByTestId("settings-modal-backdrop"));
 
     expect(useUiStore.getState().settingsOpen).toBe(false);
   });

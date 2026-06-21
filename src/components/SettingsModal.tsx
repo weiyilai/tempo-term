@@ -9,17 +9,17 @@ export function SettingsModal() {
   const setSettingsOpen = useUiStore((s) => s.setSettingsOpen);
   const close = () => setSettingsOpen(false);
 
-  // Esc closes the modal, matching the other dialogs in the app.
+  // Esc closes the modal, matching the other dialogs in the app. The Zustand
+  // setter is a stable reference, so the listener binds once.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        close();
+        setSettingsOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [setSettingsOpen]);
 
   return (
     <div
@@ -31,6 +31,7 @@ export function SettingsModal() {
           close();
         }
       }}
+      data-testid="settings-modal-backdrop"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
     >
       <div className="relative flex h-[80vh] w-full max-w-4xl overflow-hidden rounded-xl border border-border-strong bg-bg shadow-2xl">
