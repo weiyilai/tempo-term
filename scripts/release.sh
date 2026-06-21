@@ -17,7 +17,7 @@ export APPLE_PASSWORD="${APPLE_PASSWORD:-${APPLE_APP_SPECIFIC_PASSWORD:-}}"
 [ -z "${APPLE_ID:-}" ] && { echo "✗ APPLE_ID env not set"; exit 1; }
 [ -z "${APPLE_PASSWORD:-}" ] && { echo "✗ APPLE_PASSWORD / APPLE_APP_SPECIFIC_PASSWORD env not set (use an app-specific password)"; exit 1; }
 [ -z "${APPLE_TEAM_ID:-}" ] && { echo "✗ APPLE_TEAM_ID env not set"; exit 1; }
-[ -f ~/.tempoterm/updater-key.json ] || { echo "✗ Updater private key missing at ~/.tempoterm/updater-key.json"; exit 1; }
+[ -f ~/.tauri/tempo-term.key ] || { echo "✗ Updater private key missing at ~/.tauri/tempo-term.key"; exit 1; }
 [ -f CHANGELOG-NEXT.md ] || { echo "✗ CHANGELOG-NEXT.md missing (write release notes there first)"; exit 1; }
 if gh release view "$TAG" >/dev/null 2>&1; then
   echo "✗ Release $TAG already exists on GitHub"
@@ -27,7 +27,7 @@ fi
 # 2. Build with signing + updater key in env.
 # The key was generated without a password, so set it explicitly empty to stop
 # the CLI from prompting.
-export TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tempoterm/updater-key.json)
+export TAURI_SIGNING_PRIVATE_KEY=$(cat ~/.tauri/tempo-term.key)
 export TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""
 echo "→ Building (this also notarizes + staples the .app, given the APPLE_* envs)..."
 pnpm tauri build --target aarch64-apple-darwin
