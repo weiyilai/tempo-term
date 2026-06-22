@@ -20,16 +20,16 @@ describe("selectCardTitle", () => {
       activeLeafId: "p1",
       renamed: true,
     });
-    expect(selectCardTitle(t, { "/a": "auto title" })).toBe("tab-title");
+    expect(selectCardTitle(t, "auto title")).toBe("tab-title");
   });
 
   it("uses the auto session title when not renamed", () => {
     const t = tab({ paneTree: leaf("p1", { kind: "terminal", cwd: "/a" }), activeLeafId: "p1" });
-    expect(selectCardTitle(t, { "/a": "auto title" })).toBe("auto title");
+    expect(selectCardTitle(t, "auto title")).toBe("auto title");
   });
 
   it("falls back to the tab title when there is no auto title", () => {
     const t = tab({ paneTree: leaf("p1", { kind: "terminal", cwd: "/a" }), activeLeafId: "p1" });
-    expect(selectCardTitle(t, {})).toBe("tab-title");
+    expect(selectCardTitle(t, undefined)).toBe("tab-title");
   });
 });

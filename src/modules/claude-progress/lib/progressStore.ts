@@ -3,42 +3,55 @@ import { createNormalizer, type Normalizer } from "./normalize";
 import { createCodexNormalizer, type AgentKind } from "./codexNormalize";
 import { emptyProgressState, reduceProgress, type ProgressState } from "./progressState";
 
+/**
+ * The store key for one tracked session: a directory plus the agent running in
+ * it. Keying by cwd alone collides when the same directory runs Claude in one
+ * pane and Codex in another, so each agent gets its own slot. The agent name has
+ * no colon, so splitting on the first colon recovers the full cwd.
+ */
+export function progressKey(cwd: string, agent: AgentKind): string {
+  return `${agent}:${cwd}`;
+}
+
+/** Split a progress key back into its agent and cwd. */
+export function parseProgressKey(key: string): { agent: AgentKind; cwd: string } {
+  const sep = key.indexOf(":");
+  return { agent: key.slice(0, sep) as AgentKind, cwd: key.slice(sep + 1) };
+}
+
 interface ProgressStoreState {
-  /** Accumulated progress per watched project directory (keyed by cwd). */
+  /** Accumulated progress per tracked session, keyed by `progressKey(cwd, agent)`. */
   sessions: Record<string, ProgressState>;
   /**
-   * A per-cwd counter bumped whenever that directory switches to a new session
-   * (a reset). Consumers watch it to know when to refetch derived data like the
-   * session title.
+   * A per-session counter bumped whenever that session resets (a new session in
+   * the same cwd+agent slot). Consumers watch it to know when to refetch derived
+   * data like the session title. Keyed by `progressKey(cwd, agent)`.
    */
   sessionEpochs: Record<string, number>;
-  /** The agent currently feeding each cwd (keyed by cwd). */
-  agents: Record<string, AgentKind>;
   /**
    * Feed raw transcript lines (from the backend watcher) for one cwd. `reset`
    * marks the first batch of a newly started session, clearing prior progress.
-   * `agent` selects the normalizer; switching agent for a cwd rebuilds it fresh.
+   * `agent` selects both the normalizer and which session slot the lines land in,
+   * so Claude and Codex in the same directory stay independent.
    */
   pushLines: (cwd: string, agent: AgentKind, lines: string[], reset: boolean) => void;
-  /** Keep only the sessions for `cwds`; drop progress for directories no longer watched. */
+  /** Keep only the sessions whose cwd is in `cwds`; drop the rest. */
   syncSessions: (cwds: string[]) => void;
 }
 
-// Each cwd's normalizer is stateful (it pairs tool calls with their results), so
-// the normalizers live alongside the store, one per watched directory.
+// Each session's normalizer is stateful (it pairs tool calls with their
+// results), so the normalizers live alongside the store, one per session slot.
 const normalizers = new Map<string, Normalizer>();
-const normalizerAgents = new Map<string, AgentKind>();
 
 function makeNormalizer(agent: AgentKind): Normalizer {
   return agent === "codex" ? createCodexNormalizer() : createNormalizer();
 }
 
-function normalizerFor(cwd: string, agent: AgentKind): Normalizer {
-  let normalizer = normalizers.get(cwd);
-  if (!normalizer || normalizerAgents.get(cwd) !== agent) {
+function normalizerFor(key: string, agent: AgentKind): Normalizer {
+  let normalizer = normalizers.get(key);
+  if (!normalizer) {
     normalizer = makeNormalizer(agent);
-    normalizers.set(cwd, normalizer);
-    normalizerAgents.set(cwd, agent);
+    normalizers.set(key, normalizer);
   }
   return normalizer;
 }
@@ -46,62 +59,52 @@ function normalizerFor(cwd: string, agent: AgentKind): Normalizer {
 export const useProgressStore = create<ProgressStoreState>((set) => ({
   sessions: {},
   sessionEpochs: {},
-  agents: {},
 
   pushLines: (cwd, agent, lines, reset) =>
     set((state) => {
-      // A reset (new session) or an agent switch for this cwd starts fresh so the
-      // old session's or other agent's leftovers can't linger.
-      const fresh = reset || normalizerAgents.get(cwd) !== agent;
-      if (fresh) {
-        normalizers.set(cwd, makeNormalizer(agent));
-        normalizerAgents.set(cwd, agent);
+      const key = progressKey(cwd, agent);
+      // A reset (new session) starts fresh so the old session's leftovers can't
+      // linger. Each agent has its own slot, so there is no cross-agent reset.
+      if (reset) {
+        normalizers.set(key, makeNormalizer(agent));
       }
-      // A new session for this cwd: bump its epoch so title consumers refetch.
-      const sessionEpochs = fresh
-        ? { ...state.sessionEpochs, [cwd]: (state.sessionEpochs[cwd] ?? 0) + 1 }
+      const sessionEpochs = reset
+        ? { ...state.sessionEpochs, [key]: (state.sessionEpochs[key] ?? 0) + 1 }
         : state.sessionEpochs;
-      const normalizer = normalizerFor(cwd, agent);
-      const previous = fresh ? undefined : state.sessions[cwd];
+      const normalizer = normalizerFor(key, agent);
+      const previous = reset ? undefined : state.sessions[key];
       let next = previous ?? emptyProgressState();
       for (const line of lines) {
         for (const event of normalizer.push(line)) {
           next = reduceProgress(next, event);
         }
       }
-      const agents = state.agents[cwd] === agent ? state.agents : { ...state.agents, [cwd]: agent };
       if (next === previous) {
-        return { sessionEpochs, agents };
+        return { sessionEpochs };
       }
-      // Don't materialize an empty session for a cwd whose lines produced nothing.
-      if (!fresh && previous === undefined && isEmptyProgress(next)) {
-        return { sessionEpochs, agents };
+      // Don't materialize an empty session for a slot whose lines produced nothing.
+      if (!reset && previous === undefined && isEmptyProgress(next)) {
+        return { sessionEpochs };
       }
-      return { sessions: { ...state.sessions, [cwd]: next }, sessionEpochs, agents };
+      return { sessions: { ...state.sessions, [key]: next }, sessionEpochs };
     }),
 
   syncSessions: (cwds) =>
     set((state) => {
       const keep = new Set(cwds);
-      for (const cwd of normalizers.keys()) {
-        if (!keep.has(cwd)) {
-          normalizers.delete(cwd);
-          normalizerAgents.delete(cwd);
+      const kept = (key: string) => keep.has(parseProgressKey(key).cwd);
+      for (const key of normalizers.keys()) {
+        if (!kept(key)) {
+          normalizers.delete(key);
         }
       }
       const sessions: Record<string, ProgressState> = {};
-      for (const [cwd, progress] of Object.entries(state.sessions)) {
-        if (keep.has(cwd)) {
-          sessions[cwd] = progress;
+      for (const [key, progress] of Object.entries(state.sessions)) {
+        if (kept(key)) {
+          sessions[key] = progress;
         }
       }
-      const agents: Record<string, AgentKind> = {};
-      for (const [cwd, kind] of Object.entries(state.agents)) {
-        if (keep.has(cwd)) {
-          agents[cwd] = kind;
-        }
-      }
-      return { sessions, agents };
+      return { sessions };
     }),
 }));
 

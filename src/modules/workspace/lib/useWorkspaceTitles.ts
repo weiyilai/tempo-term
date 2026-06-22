@@ -1,29 +1,39 @@
 import { useEffect } from "react";
-import { useProgressStore } from "@/modules/claude-progress/lib/progressStore";
+import {
+  parseProgressKey,
+  progressKey,
+  useProgressStore,
+} from "@/modules/claude-progress/lib/progressStore";
+import type { AgentKind } from "@/modules/claude-progress/lib/codexNormalize";
 import { useTitlesStore } from "./titlesStore";
 
+/** One session whose auto title we want kept fresh. */
+export interface TitleTarget {
+  cwd: string;
+  agent: AgentKind;
+}
+
 /**
- * Fetches the auto session title for each visible card's cwd, and refetches a
- * cwd when its session epoch changes (a new session starts), so titles track
- * the latest transcript. Failures are swallowed by the store.
+ * Fetches the auto session title for each visible session (cwd + agent), and
+ * refetches one when its session epoch changes (a new session starts), so titles
+ * track the latest transcript. Failures are swallowed by the store.
  */
-export function useWorkspaceTitles(cwds: string[]): void {
+export function useWorkspaceTitles(targets: TitleTarget[]): void {
   const epochs = useProgressStore((s) => s.sessionEpochs);
   const refresh = useTitlesStore((s) => s.refresh);
-  // The key folds in each cwd's epoch so a reset triggers a refetch for it.
-  const key = cwds
-    .slice()
-    .sort()
-    .map((cwd) => `${cwd}@${epochs[cwd] ?? 0}`)
-    .join("\n");
+  // Dedupe to one entry per session and fold in each session's epoch, so a reset
+  // triggers exactly one refetch for it.
+  const keys = [...new Set(targets.map((t) => progressKey(t.cwd, t.agent)))].sort();
+  const key = keys.map((k) => `${k}@${epochs[k] ?? 0}`).join("\n");
 
   useEffect(() => {
     if (!key) {
       return;
     }
     for (const entry of key.split("\n")) {
-      const cwd = entry.slice(0, entry.lastIndexOf("@"));
-      void refresh(cwd);
+      const sessionKey = entry.slice(0, entry.lastIndexOf("@"));
+      const { cwd, agent } = parseProgressKey(sessionKey);
+      void refresh(cwd, agent);
     }
   }, [key, refresh]);
 }

@@ -48,6 +48,49 @@ pub fn parse_session_meta_cwd(first_line: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Longest session title we keep; longer text is truncated for display.
+const MAX_TITLE_CHARS: usize = 80;
+
+/// Derive a title for a Codex session from a reader over its rollout JSONL: the
+/// first `user_message` event's text, trimmed and truncated. The session opens
+/// with injected `response_item` context (environment, instructions); the user's
+/// own first turn arrives as an `event_msg`/`user_message`, so that is what we
+/// use. Reads lazily and stops at the first match, so a long rollout is not fully
+/// loaded. Returns None when the rollout has no user message yet.
+pub fn extract_codex_title<R: BufRead>(reader: R) -> Option<String> {
+    for line in reader.lines() {
+        let line = match line {
+            Ok(line) => line,
+            Err(_) => continue,
+        };
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let value: Value = match serde_json::from_str(line) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        if value.get("type").and_then(Value::as_str) != Some("event_msg") {
+            continue;
+        }
+        let payload = match value.get("payload") {
+            Some(payload) => payload,
+            None => continue,
+        };
+        if payload.get("type").and_then(Value::as_str) != Some("user_message") {
+            continue;
+        }
+        if let Some(text) = payload.get("message").and_then(Value::as_str) {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.chars().take(MAX_TITLE_CHARS).collect());
+            }
+        }
+    }
+    None
+}
+
 /// `~/.codex/sessions` (or under the CODEX_HOME override).
 pub fn codex_sessions_base(home: &Path) -> PathBuf {
     match std::env::var("CODEX_HOME") {
@@ -254,6 +297,18 @@ fn route_event(app: &AppHandle, base: &Path, route: &Arc<Mutex<RouteState>>, eve
     }
 }
 
+/// The title of the newest Codex session for `cwd`, read from its rollout.
+/// Returns None when no recent rollout exists for that directory.
+#[tauri::command]
+pub fn codex_session_title(app: AppHandle, cwd: String) -> Option<String> {
+    let home = app.path().home_dir().ok()?;
+    let base = codex_sessions_base(&home);
+    let candidates = scan_recent_rollouts(&base, &recent_days());
+    let path = select_newest_for_cwd(&candidates, &cwd)?;
+    let file = File::open(path).ok()?;
+    extract_codex_title(BufReader::new(file))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,5 +364,31 @@ mod tests {
         ];
         assert_eq!(select_newest_for_cwd(&candidates, "/proj"), Some(PathBuf::from("/a/new.jsonl")));
         assert_eq!(select_newest_for_cwd(&candidates, "/missing"), None);
+    }
+
+    #[test]
+    fn title_is_the_first_user_message_text() {
+        // A real rollout opens with session_meta and injected context lines; the
+        // first thing the user actually typed arrives as an event_msg/user_message.
+        let contents = concat!(
+            r#"{"type":"session_meta","payload":{"cwd":"/proj"}}"#,
+            "\n",
+            r#"{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"<environment_context>noise</environment_context>"}]}}"#,
+            "\n",
+            r#"{"type":"event_msg","payload":{"type":"user_message","message":"Fix the flaky test"}}"#,
+            "\n",
+            r#"{"type":"event_msg","payload":{"type":"user_message","message":"a later message"}}"#,
+        );
+        assert_eq!(extract_codex_title(contents.as_bytes()).as_deref(), Some("Fix the flaky test"));
+    }
+
+    #[test]
+    fn title_is_none_without_a_user_message() {
+        let contents = concat!(
+            r#"{"type":"session_meta","payload":{"cwd":"/proj"}}"#,
+            "\n",
+            r#"{"type":"event_msg","payload":{"type":"task_started"}}"#,
+        );
+        assert_eq!(extract_codex_title(contents.as_bytes()), None);
     }
 }

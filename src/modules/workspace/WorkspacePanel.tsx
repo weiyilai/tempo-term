@@ -23,6 +23,7 @@ import type { SessionStatus } from "@/modules/claude-progress/lib/sessionStatus"
 import { tabSessionStatus } from "./lib/tabSessionStatus";
 import { deriveTabCwd } from "./lib/tabCwd";
 import { selectCardTitle } from "./lib/cardTitle";
+import { collectTabSessions, type TabSession } from "./lib/tabSessions";
 import { useWorktreeStore } from "./lib/worktreeStore";
 import { useWorktreeInfos } from "./lib/useWorktreeInfos";
 import { useTitlesStore } from "./lib/titlesStore";
@@ -31,7 +32,7 @@ import { usePrStore } from "./lib/prStore";
 import { useWorkspacePrs } from "./lib/useWorkspacePrs";
 import type { WorktreeInfo } from "./lib/worktreeBridge";
 import type { PrInfo } from "./lib/prBridge";
-import { useProgressStore } from "@/modules/claude-progress/lib/progressStore";
+import { progressKey } from "@/modules/claude-progress/lib/progressStore";
 import { agentLabel } from "./lib/agentLabel";
 
 function tabIcon(kind: TabKind): LucideIcon {
@@ -170,23 +171,75 @@ function PrBadge({ pr }: { pr: PrInfo }) {
   );
 }
 
+/** The last path segment of a cwd, used when a session has no transcript title yet. */
+function basename(path: string): string {
+  // Split on both separators so Windows paths (C:\...) basename correctly too.
+  const parts = path.split(/[/\\]/).filter(Boolean);
+  return parts[parts.length - 1] ?? path;
+}
+
+/** A session's display title: its transcript title, else its directory name. */
+function sessionTitle(session: TabSession, titles: Record<string, string>): string {
+  if (session.agent && session.cwd) {
+    const auto = titles[progressKey(session.cwd, session.agent)];
+    if (auto) {
+      return auto;
+    }
+  }
+  return session.cwd ? basename(session.cwd) : "";
+}
+
+/**
+ * One session line inside a card that runs more than one agent: its status, the
+ * agent label, and its own title. The status badge follows the card setting.
+ */
+function SessionRow({
+  session,
+  titles,
+  showStatus,
+}: {
+  session: TabSession;
+  titles: Record<string, string>;
+  showStatus: boolean;
+}) {
+  const label = agentLabel(session.agent);
+  return (
+    <span className="flex items-center gap-1.5">
+      {showStatus && <StatusBadge status={session.status} />}
+      {label && <span className="shrink-0 text-[11px] text-fg-subtle">{label}</span>}
+      <span className="min-w-0 flex-1 truncate text-[11px] text-fg-muted">
+        {sessionTitle(session, titles)}
+      </span>
+    </span>
+  );
+}
+
 function TabCard({ tab }: { tab: Tab }) {
   const activeId = useTabsStore((s) => s.activeId);
   const setActive = useTabsStore((s) => s.setActive);
   const statuses = useSessionStatusStore((s) => s.statuses);
+  const leafAgents = useSessionStatusStore((s) => s.agents);
   const infos = useWorktreeStore((s) => s.infos);
   const titles = useTitlesStore((s) => s.titles);
   const prs = usePrStore((s) => s.prs);
   const card = useSettingsStore((s) => s.workspaceCard);
-  const progressAgents = useProgressStore((s) => s.agents);
   const active = tab.id === activeId;
   const cwd = deriveTabCwd(tab);
+  // Each pane running an agent is its own session. With two or more, the header
+  // becomes the tab's identity and every session gets its own line below.
+  const sessions = collectTabSessions(tab, statuses, leafAgents);
+  const multi = sessions.length >= 2;
+  const primary = sessions[0];
   const status = tabSessionStatus(tab, statuses);
   const info = cwd ? infos[cwd] : undefined;
-  const title = selectCardTitle(tab, titles);
+  const autoTitle =
+    !multi && primary?.cwd && primary?.agent
+      ? titles[progressKey(primary.cwd, primary.agent)]
+      : undefined;
+  const title = selectCardTitle(tab, autoTitle);
   const pr = cwd ? prs[cwd] : undefined;
   const Icon = tabIcon(tab.kind);
-  const label = agentLabel(cwd ? progressAgents[cwd] : undefined);
+  const label = agentLabel(primary?.agent);
 
   return (
     <button
@@ -202,11 +255,23 @@ function TabCard({ tab }: { tab: Tab }) {
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           <span className="min-w-0 flex-1 truncate text-xs font-medium text-fg">{title}</span>
-          {card.status && status && <StatusBadge status={status} />}
-          {card.status && status && label && (
+          {!multi && card.status && status && <StatusBadge status={status} />}
+          {!multi && card.status && status && label && (
             <span className="shrink-0 text-[11px] text-fg-subtle">{label}</span>
           )}
         </span>
+        {multi && (
+          <span className="mt-1 block space-y-0.5">
+            {sessions.map((session) => (
+              <SessionRow
+                key={session.leafId}
+                session={session}
+                titles={titles}
+                showStatus={card.status}
+              />
+            ))}
+          </span>
+        )}
         <BranchBlock info={info} cwd={cwd} showBranch={card.branch} showCwd={card.cwd} />
         {card.pr && pr && (
           <span className="mt-0.5 block">
@@ -329,6 +394,8 @@ export function WorkspacePanel() {
   const infos = useWorktreeStore((s) => s.infos);
   const showPr = useSettingsStore((s) => s.workspaceCard.pr);
   const prSource = useSettingsStore((s) => s.prSource);
+  const statuses = useSessionStatusStore((s) => s.statuses);
+  const leafAgents = useSessionStatusStore((s) => s.agents);
   // Dedupe so multiple tabs in the same directory don't trigger redundant IPC
   // and network lookups for that directory.
   const cwds = Array.from(
@@ -337,7 +404,14 @@ export function WorkspacePanel() {
     ),
   );
   useWorktreeInfos(cwds);
-  useWorkspaceTitles(cwds);
+  // Titles are per session (cwd + agent), so a directory running both Claude and
+  // Codex gets each one's own title fetched.
+  const titleTargets = tabs.flatMap((tab) =>
+    collectTabSessions(tab, statuses, leafAgents).flatMap((session) =>
+      session.cwd && session.agent ? [{ cwd: session.cwd, agent: session.agent }] : [],
+    ),
+  );
+  useWorkspaceTitles(titleTargets);
 
   // PR lookups need a branch, which comes from the worktree info fetched above.
   // Skip fetching entirely when the PR block is hidden.

@@ -42,7 +42,8 @@ import { fsHomeDir, fsReadFile } from "@/modules/explorer/lib/fsBridge";
 import { getDraggedEntry } from "@/modules/explorer/lib/dragEntry";
 import {
   STATUS_OSC_CODE,
-  isTrackedAgentForeground,
+  isClaudeForeground,
+  isCodexForeground,
   parseStatusOsc,
 } from "@/modules/claude-progress/lib/sessionStatus";
 import { useSessionStatusStore } from "@/modules/claude-progress/lib/sessionStatusStore";
@@ -607,14 +608,22 @@ export function TerminalView({
           last = dir;
           useWorkspaceStore.getState().setRoot(dir);
         }
-        // Crash backstop: if this pane still shows a status but no tracked agent
-        // (Claude or Codex) is the foreground process, SessionEnd never arrived
-        // (e.g. a hard kill), so the OSC never cleared it. Clear it here.
+        // While a pane shows a status, read its foreground process to (a) label
+        // which agent is running, so a card can tell Claude from Codex even when
+        // two panes share a directory, and (b) act as a crash backstop: if no
+        // tracked agent is foreground, SessionEnd never arrived (e.g. a hard
+        // kill) so the OSC never cleared it — clear the stale status here.
         const leaf = leafIdRef.current;
         if (leaf && useSessionStatusStore.getState().statuses[leaf]) {
           const command = await session.foregroundCommand().catch(() => null);
-          if (!cancelled && !isTrackedAgentForeground(command)) {
-            useSessionStatusStore.getState().clear(leaf);
+          if (!cancelled) {
+            if (isClaudeForeground(command)) {
+              useSessionStatusStore.getState().setAgent(leaf, "claude");
+            } else if (isCodexForeground(command)) {
+              useSessionStatusStore.getState().setAgent(leaf, "codex");
+            } else {
+              useSessionStatusStore.getState().clear(leaf);
+            }
           }
         }
       } catch {
