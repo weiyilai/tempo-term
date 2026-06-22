@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { useSessionStatusStore } from "./sessionStatusStore";
 
-beforeEach(() => useSessionStatusStore.setState({ statuses: {} }));
+beforeEach(() => useSessionStatusStore.setState({ statuses: {}, agents: {} }));
 
 describe("sessionStatusStore", () => {
   it("sets and overwrites a leaf's status", () => {
@@ -21,5 +21,24 @@ describe("sessionStatusStore", () => {
     const before = useSessionStatusStore.getState().statuses;
     useSessionStatusStore.getState().clear("missing");
     expect(useSessionStatusStore.getState().statuses).toBe(before);
+  });
+});
+
+describe("sessionStatusStore agents", () => {
+  it("records the agent running in a leaf", () => {
+    useSessionStatusStore.getState().setAgent("leaf-1", "codex");
+    expect(useSessionStatusStore.getState().agents["leaf-1"]).toBe("codex");
+  });
+
+  it("clears a leaf's status and agent together when the session ends", () => {
+    const store = useSessionStatusStore.getState();
+    store.setStatus("leaf-1", "thinking");
+    store.setAgent("leaf-1", "claude");
+
+    store.clear("leaf-1");
+
+    const state = useSessionStatusStore.getState();
+    expect(state.statuses["leaf-1"]).toBeUndefined();
+    expect(state.agents["leaf-1"]).toBeUndefined();
   });
 });

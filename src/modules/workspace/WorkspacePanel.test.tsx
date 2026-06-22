@@ -5,13 +5,14 @@ import { WorkspacePanel } from "./WorkspacePanel";
 import { useTabsStore } from "@/stores/tabsStore";
 import { leaf } from "@/modules/terminal/lib/terminalLayout";
 import { useSessionStatusStore } from "@/modules/claude-progress/lib/sessionStatusStore";
+import { progressKey } from "@/modules/claude-progress/lib/progressStore";
 import { useWorktreeStore } from "./lib/worktreeStore";
 import { useTitlesStore } from "./lib/titlesStore";
 import { usePrStore } from "./lib/prStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 
 beforeEach(() => {
-  useSessionStatusStore.setState({ statuses: {} });
+  useSessionStatusStore.setState({ statuses: {}, agents: {} });
   useWorktreeStore.setState({ infos: {} });
   useTitlesStore.setState({ titles: {} });
   usePrStore.setState({ prs: {}, fetchedAt: {} });
@@ -141,10 +142,53 @@ describe("WorkspacePanel", () => {
   });
 
   it("shows the auto session title instead of the tab title", () => {
-    useTitlesStore.setState({ titles: { "/a": "Auto Alpha" } });
+    useSessionStatusStore.setState({ statuses: { p1: "active" }, agents: { p1: "claude" } });
+    useTitlesStore.setState({ titles: { [progressKey("/a", "claude")]: "Auto Alpha" } });
     render(<WorkspacePanel />);
     expect(screen.getByText("Auto Alpha")).toBeInTheDocument();
     expect(screen.queryByText("alpha")).toBeNull();
+  });
+
+  it("lists every agent session when a tab is split across two panes", () => {
+    useTabsStore.setState({
+      spaces: [{ id: "s1", name: "Salon" }],
+      activeSpaceId: "s1",
+      activeId: "t1",
+      tabs: [
+        {
+          id: "t1",
+          spaceId: "s1",
+          title: "split",
+          kind: "terminal",
+          paneTree: {
+            kind: "split",
+            direction: "row",
+            sizes: [0.5, 0.5],
+            children: [
+              { kind: "leaf", id: "p1", pane: { kind: "terminal", cwd: "/a" } },
+              { kind: "leaf", id: "p2", pane: { kind: "terminal", cwd: "/a" } },
+            ],
+          },
+          activeLeafId: "p1",
+        },
+      ],
+    });
+    useSessionStatusStore.setState({
+      statuses: { p1: "active", p2: "thinking" },
+      agents: { p1: "codex", p2: "claude" },
+    });
+    useTitlesStore.setState({
+      titles: {
+        [progressKey("/a", "codex")]: "Codex task",
+        [progressKey("/a", "claude")]: "Claude task",
+      },
+    });
+    render(<WorkspacePanel />);
+    const card = screen.getByRole("button", { name: /split/ });
+    expect(within(card).getByText("Codex")).toBeInTheDocument();
+    expect(within(card).getByText("Claude")).toBeInTheDocument();
+    expect(within(card).getByText("Codex task")).toBeInTheDocument();
+    expect(within(card).getByText("Claude task")).toBeInTheDocument();
   });
 
   it("shows a PR badge on a card whose cwd has a tracked PR", () => {

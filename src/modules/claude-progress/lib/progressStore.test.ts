@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { isEmptyProgress, useProgressStore } from "./progressStore";
+import { isEmptyProgress, progressKey, useProgressStore } from "./progressStore";
 import { emptyProgressState, reduceProgress } from "./progressState";
+
+const CODEX_EXEC_LINE = JSON.stringify({
+  type: "response_item",
+  payload: { type: "function_call", name: "exec_command", call_id: "c1", arguments: "{}" },
+});
+const CLAUDE_TOOL_LINE = JSON.stringify({
+  type: "assistant",
+  message: { content: [{ type: "tool_use", id: "t1", name: "Bash" }] },
+});
 
 describe("isEmptyProgress", () => {
   it("is true for a fresh empty state", () => {
@@ -16,37 +25,37 @@ describe("isEmptyProgress", () => {
 });
 
 describe("sessionEpochs", () => {
-  it("increments a cwd's epoch each time its session resets", () => {
+  it("increments a session's epoch each time it resets", () => {
     useProgressStore.setState({ sessions: {}, sessionEpochs: {} });
+    const key = progressKey("/a", "claude");
     useProgressStore.getState().pushLines("/a", "claude", [], true);
-    expect(useProgressStore.getState().sessionEpochs["/a"]).toBe(1);
+    expect(useProgressStore.getState().sessionEpochs[key]).toBe(1);
     useProgressStore.getState().pushLines("/a", "claude", [], true);
-    expect(useProgressStore.getState().sessionEpochs["/a"]).toBe(2);
+    expect(useProgressStore.getState().sessionEpochs[key]).toBe(2);
   });
 
   it("does not bump the epoch on a non-reset append", () => {
-    useProgressStore.setState({ sessions: {}, sessionEpochs: { "/a": 1 } });
+    const key = progressKey("/a", "claude");
+    useProgressStore.setState({ sessions: {}, sessionEpochs: { [key]: 1 } });
     useProgressStore.getState().pushLines("/a", "claude", [], false);
-    expect(useProgressStore.getState().sessionEpochs["/a"]).toBe(1);
+    expect(useProgressStore.getState().sessionEpochs[key]).toBe(1);
   });
 });
 
-describe("per-agent normalizer selection", () => {
-  it("rebuilds the normalizer when the agent changes for a cwd", () => {
+describe("per-(cwd, agent) sessions", () => {
+  it("keeps a cwd's codex and claude sessions independent", () => {
     useProgressStore.setState({ sessions: {}, sessionEpochs: {} });
     const store = useProgressStore.getState();
-    // A Codex tool starts under codex.
-    store.pushLines("/p", "codex", [
-      JSON.stringify({ type: "response_item", payload: { type: "function_call", name: "exec_command", call_id: "c1", arguments: "{}" } }),
-    ], false);
-    expect(useProgressStore.getState().sessions["/p"].activities).toHaveLength(1);
+    // The same directory runs Codex in one pane and Claude in another. Both
+    // streams arrive tagged with the same cwd but must not clobber each other.
+    store.pushLines("/p", "codex", [CODEX_EXEC_LINE], false);
+    store.pushLines("/p", "claude", [CLAUDE_TOOL_LINE], false);
 
-    // Switching the same cwd to claude starts fresh (no leftover codex activity).
-    store.pushLines("/p", "claude", [
-      JSON.stringify({ type: "assistant", message: { content: [{ type: "tool_use", id: "t1", name: "Bash" }] } }),
-    ], false);
-    const activities = useProgressStore.getState().sessions["/p"].activities;
-    expect(activities).toHaveLength(1);
-    expect(activities[0].id).toBe("t1");
+    const sessions = useProgressStore.getState().sessions;
+    const codex = sessions[progressKey("/p", "codex")];
+    const claude = sessions[progressKey("/p", "claude")];
+    expect(codex.activities).toHaveLength(1);
+    expect(claude.activities).toHaveLength(1);
+    expect(claude.activities[0].id).toBe("t1");
   });
 });
