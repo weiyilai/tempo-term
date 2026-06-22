@@ -49,7 +49,10 @@ fn read_json(path: &Path) -> Result<serde_json::Value, String> {
 }
 
 fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
-    let tmp = path.with_extension("tmp");
+    let tmp = path.with_file_name(format!(
+        "{}.tmp",
+        path.file_name().unwrap_or_default().to_string_lossy()
+    ));
     if let Err(err) = std::fs::write(&tmp, text) {
         let _ = std::fs::remove_file(&tmp);
         return Err(err.to_string());
