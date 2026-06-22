@@ -214,7 +214,10 @@ export function TabBar() {
         onDragEnd={handleDragEnd}
         onDragCancel={handleDragCancel}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+        <div
+          data-tauri-drag-region
+          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto"
+        >
           <SortableContext
             items={visibleTabs.map((tab) => tab.id)}
             strategy={horizontalListSortingStrategy}
