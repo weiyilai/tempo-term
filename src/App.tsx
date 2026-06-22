@@ -17,7 +17,7 @@ import { applyTheme, getTheme } from "@/themes/themes";
 import { listen } from "@tauri-apps/api/event";
 import { useProgressStore } from "@/modules/claude-progress/lib/progressStore";
 import { useWatchSessions } from "@/modules/claude-progress/lib/useWatchSessions";
-import { installStatusHook } from "@/modules/claude-progress/lib/statusHookBridge";
+import { installStatusHook, installCodexStatusHook } from "@/modules/claude-progress/lib/statusHookBridge";
 import { useWatchNotes } from "@/modules/notes/lib/useWatchNotes";
 
 const MIN_SIDEBAR = 180;
@@ -56,6 +56,7 @@ function App() {
   useEffect(() => {
     if (useSettingsStore.getState().claudeStatusTracking) {
       void installStatusHook().catch(() => {});
+      void installCodexStatusHook().catch(() => {});
     }
   }, []);
 
