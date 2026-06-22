@@ -17,6 +17,10 @@ export interface OpenPtyOptions {
   onExit: (code: number) => void;
 }
 
+// Session ids opened by THIS window's webview. Used to close only this window's
+// PTYs when it closes (pty_close_all in the backend is global across windows).
+const localSessions = new Set<number>();
+
 /**
  * Normalise whatever shape the channel delivers (ArrayBuffer, a typed array,
  * or a plain number array) into a Uint8Array, so terminal output renders
@@ -63,13 +67,30 @@ export async function openPty(opts: OpenPtyOptions): Promise<PtySession> {
     onData,
     onExit,
   });
+  localSessions.add(id);
 
   return {
     id,
     write: (data) => invoke("pty_write", { id, data }),
     resize: (cols, rows) => invoke("pty_resize", { id, cols, rows }),
-    close: () => invoke("pty_close", { id }),
+    close: () => {
+      localSessions.delete(id);
+      return invoke("pty_close", { id });
+    },
     cwd: () => invoke<string | null>("pty_cwd", { id }),
     foregroundCommand: () => invoke<string | null>("pty_foreground_command", { id }),
   };
+}
+
+/**
+ * Close every PTY session this window opened, then clear the registry. Used on
+ * window close so a secondary window leaves no orphan shells. Per-id errors are
+ * swallowed so one failure does not block the others.
+ */
+export async function closeLocalSessions(): Promise<void> {
+  const ids = [...localSessions];
+  localSessions.clear();
+  await Promise.all(
+    ids.map((id) => invoke("pty_close", { id }).catch(() => {})),
+  );
 }
