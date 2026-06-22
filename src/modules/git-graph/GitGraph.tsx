@@ -6,6 +6,7 @@ import {
   DEFAULT_GEOMETRY,
   edgePath,
 } from "./lib/graphLayout";
+import { isCurrentCommit } from "./lib/currentCommit";
 
 export interface GitGraphLabels {
   emptyTitle: string;
@@ -34,8 +35,8 @@ interface GitGraphProps {
 // light (#fff) backgrounds, and evenly spaced so adjacent lanes stay distinct.
 const BRANCH_COLORS = [
   "#e0555f", // red
-  "#e08a3c", // orange
-  "#d6a82c", // yellow (deepened so it reads on light themes)
+  "#e3712f", // orange (shifted redder to separate from yellow)
+  "#e8c139", // yellow (brighter gold so it never reads like orange)
   "#46a758", // green
   "#3b8ee0", // blue
   "#6366d6", // indigo
@@ -160,6 +161,7 @@ export function GitGraph({
               }
               const color = BRANCH_COLORS[layout.colorIndex % BRANCH_COLORS.length];
               const isSelected = selectedCommit?.hash === commit.hash;
+              const isCurrent = isCurrentCommit(commit);
               return (
                 <button
                   key={commit.hash}
@@ -180,9 +182,14 @@ export function GitGraph({
                     isSelected ? "scale-125 ring-4 ring-accent/30" : "hover:scale-110"
                   }`}
                 >
+                  {/* The current (HEAD) node is filled with the accent — a colour
+                      the branch lanes never use — and glows, so it reads as "you
+                      are here" without touching the calm commit rows. */}
                   <span
-                    className="h-3 w-3 rounded-full border-2 border-bg shadow-md"
-                    style={{ backgroundColor: color }}
+                    className={`h-3 w-3 rounded-full border-2 border-bg ${
+                      isCurrent ? "git-head-node bg-accent" : "shadow-md"
+                    }`}
+                    style={isCurrent ? undefined : { backgroundColor: color }}
                   />
                 </button>
               );
@@ -197,6 +204,15 @@ export function GitGraph({
                 return null;
               }
               const isSelected = selectedCommit?.hash === commit.hash;
+              const isCurrent = isCurrentCommit(commit);
+              // The HEAD commit is marked at its graph node (filled accent + glow);
+              // its row stays calm and only brightens to full foreground, so the
+              // list reads uniformly. Selection keeps its own filled style.
+              const rowState = isSelected
+                ? "border-border-strong bg-bg-elevated text-fg shadow-sm"
+                : isCurrent
+                  ? "border-transparent text-fg hover:bg-bg-elevated/50"
+                  : "border-transparent text-fg-muted hover:bg-bg-elevated/50 hover:text-fg";
               return (
                 <div
                   key={commit.hash}
@@ -209,11 +225,7 @@ export function GitGraph({
                     height: `${ROW_HEIGHT}px`,
                     top: `${layout.y - ROW_HEIGHT / 2}px`,
                   }}
-                  className={`absolute left-[100px] right-4 flex cursor-pointer items-center justify-between rounded border px-3 py-1 transition-all ${
-                    isSelected
-                      ? "border-border-strong bg-bg-elevated text-fg shadow-sm"
-                      : "border-transparent text-fg-muted hover:bg-bg-elevated/50 hover:text-fg"
-                  }`}
+                  className={`absolute left-[100px] right-4 flex cursor-pointer items-center justify-between rounded border px-3 py-1 transition-all ${rowState}`}
                 >
                   <div className="flex items-center space-x-3 overflow-hidden pr-2">
                     <span className="select-all font-mono text-xs font-semibold text-accent">

@@ -275,3 +275,30 @@ button:disabled {
 .note-md .hljs-variable, .note-md .hljs-template-variable,
 .note-md .hljs-property, .note-md .hljs-params { color: var(--color-fg); }
 .note-md .hljs-meta, .note-md .hljs-comment { color: var(--color-fg-subtle); }
+
+/*
+ * Git graph: the current (HEAD) commit's node. Filled with the accent — a colour
+ * the branch lanes never use — with a soft glow that gently breathes, so "you are
+ * here" is unmistakable without disturbing the calm commit rows.
+ */
+.git-head-node {
+  box-shadow:
+    0 0 0 1.5px var(--color-accent),
+    0 0 11px 2px color-mix(in srgb, var(--color-accent) 60%, transparent);
+  animation: git-head-pulse 2.6s ease-in-out infinite;
+}
+@keyframes git-head-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1.5px var(--color-accent),
+      0 0 8px 1px color-mix(in srgb, var(--color-accent) 45%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1.5px var(--color-accent),
+      0 0 14px 3px color-mix(in srgb, var(--color-accent) 72%, transparent);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .git-head-node { animation: none; }
+}
