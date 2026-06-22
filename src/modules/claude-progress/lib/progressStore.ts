@@ -12,6 +12,8 @@ interface ProgressStoreState {
    * session title.
    */
   sessionEpochs: Record<string, number>;
+  /** The agent currently feeding each cwd (keyed by cwd). */
+  agents: Record<string, AgentKind>;
   /**
    * Feed raw transcript lines (from the backend watcher) for one cwd. `reset`
    * marks the first batch of a newly started session, clearing prior progress.
@@ -44,6 +46,7 @@ function normalizerFor(cwd: string, agent: AgentKind): Normalizer {
 export const useProgressStore = create<ProgressStoreState>((set) => ({
   sessions: {},
   sessionEpochs: {},
+  agents: {},
 
   pushLines: (cwd, agent, lines, reset) =>
     set((state) => {
@@ -66,14 +69,15 @@ export const useProgressStore = create<ProgressStoreState>((set) => ({
           next = reduceProgress(next, event);
         }
       }
+      const agents = state.agents[cwd] === agent ? state.agents : { ...state.agents, [cwd]: agent };
       if (next === previous) {
-        return { sessionEpochs };
+        return { sessionEpochs, agents };
       }
       // Don't materialize an empty session for a cwd whose lines produced nothing.
       if (!fresh && previous === undefined && isEmptyProgress(next)) {
-        return { sessionEpochs };
+        return { sessionEpochs, agents };
       }
-      return { sessions: { ...state.sessions, [cwd]: next }, sessionEpochs };
+      return { sessions: { ...state.sessions, [cwd]: next }, sessionEpochs, agents };
     }),
 
   syncSessions: (cwds) =>
@@ -91,7 +95,13 @@ export const useProgressStore = create<ProgressStoreState>((set) => ({
           sessions[cwd] = progress;
         }
       }
-      return { sessions };
+      const agents: Record<string, AgentKind> = {};
+      for (const [cwd, kind] of Object.entries(state.agents)) {
+        if (keep.has(cwd)) {
+          agents[cwd] = kind;
+        }
+      }
+      return { sessions, agents };
     }),
 }));
 
