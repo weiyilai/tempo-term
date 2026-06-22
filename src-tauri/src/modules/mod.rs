@@ -5,6 +5,7 @@ pub mod clipboard;
 pub mod fonts;
 pub mod fs;
 pub mod git;
+pub mod menu;
 pub mod notes;
 pub mod pr;
 pub mod pty;

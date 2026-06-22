@@ -88,6 +88,7 @@ pub fn run() {
                     }
                 }
             }
+            modules::menu::init(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
