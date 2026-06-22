@@ -1,6 +1,6 @@
 use tauri::menu::{Menu, MenuItem, MenuItemKind, PredefinedMenuItem};
 use tauri::window::Color;
-use tauri::{App, AppHandle, Manager, TitleBarStyle, WebviewUrl, WebviewWindowBuilder};
+use tauri::{App, AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 const NEW_WINDOW_ID: &str = "new-window";
 
@@ -43,15 +43,20 @@ pub fn create_new_window(app: &AppHandle) -> tauri::Result<()> {
     // resizable(true) is required for data-tauri-drag-region to work on macOS
     // when a window is built dynamically (the overlay title bar's drag behaviour
     // depends on the window being resizable at creation time).
-    let win = WebviewWindowBuilder::new(app, &label, WebviewUrl::default())
+    let builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::default())
         .title("TempoTerm")
         .inner_size(1200.0, 800.0)
         .min_inner_size(720.0, 480.0)
-        .title_bar_style(TitleBarStyle::Overlay)
-        .hidden_title(true)
         .resizable(true)
-        .background_color(Color(34, 34, 34, 255))
-        .build()?;
+        .background_color(Color(34, 34, 34, 255));
+    // title_bar_style / hidden_title are macOS-only builder methods; on other
+    // platforms the window keeps the default title bar. Mirrors the main window,
+    // whose tauri.conf.json titleBarStyle/hiddenTitle are macOS-only too.
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .title_bar_style(tauri::TitleBarStyle::Overlay)
+        .hidden_title(true);
+    let win = builder.build()?;
     // window-state plugin may restore a stale size from a previous run.
     // Clamp anything below the minimum back to the default so the window
     // cannot appear too small or off-screen — mirrors the main-window guard
