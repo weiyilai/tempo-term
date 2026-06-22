@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -32,7 +32,9 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
 
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  const notes = readFileSync(changelogPath, "utf8");
+  // A missing changelog is treated like a blank one (no-op), so it can't crash
+  // the release step — patchManifestNotes then leaves the existing notes intact.
+  const notes = existsSync(changelogPath) ? readFileSync(changelogPath, "utf8") : "";
   const patched = patchManifestNotes(manifest, notes);
   writeFileSync(manifestPath, `${JSON.stringify(patched, null, 2)}\n`);
 }
