@@ -34,15 +34,15 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install pnpm
         # Version comes from package.json's "packageManager" field (single source
         # of truth); pinning it here too triggers ERR_PNPM_BAD_PM_VERSION.
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -76,7 +76,7 @@ jobs:
           args: "--target x86_64-pc-windows-msvc"
 
       - name: Upload installers as workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tempoterm-windows-x86_64
           if-no-files-found: error
