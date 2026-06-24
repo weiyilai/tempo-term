@@ -13,16 +13,19 @@ const NOTES_PREVIEW_CHARS = 600;
  */
 export function UpdateModal() {
   const { t } = useTranslation("settings");
-  const status = useUpdaterStore((s) => s.status);
-  const version = useUpdaterStore((s) => s.version);
-  const notes = useUpdaterStore((s) => s.notes);
+  const available = useUpdaterStore((s) => s.available);
+  const modalOpen = useUpdaterStore((s) => s.modalOpen);
   const installing = useUpdaterStore((s) => s.installing);
+  const errorMessage = useUpdaterStore((s) => s.errorMessage);
   const installUpdate = useUpdaterStore((s) => s.installUpdate);
-  const dismiss = useUpdaterStore((s) => s.dismiss);
+  const dismiss = useUpdaterStore((s) => s.dismissModal);
 
-  if (status !== "available") {
+  if (!modalOpen || !available) {
     return null;
   }
+
+  const version = available.version;
+  const notes = available.notes;
 
   const divided = separateLanguageSections(notes);
   const truncated = divided.length > NOTES_PREVIEW_CHARS;
@@ -62,6 +65,9 @@ export function UpdateModal() {
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
+          {errorMessage && (
+            <span className="mr-auto text-xs text-danger">{errorMessage}</span>
+          )}
           <button
             type="button"
             onClick={dismiss}

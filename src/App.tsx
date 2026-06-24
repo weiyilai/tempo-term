@@ -5,6 +5,7 @@ import { Resizer } from "@/components/Resizer";
 import { StatusBar } from "@/components/StatusBar";
 import { SettingsModal } from "@/components/SettingsModal";
 import { UpdateModal } from "@/components/UpdateModal";
+import { UpdateToast } from "@/components/UpdateToast";
 import { TabsArea } from "@/components/TabsArea";
 import { useUiStore } from "@/stores/uiStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
@@ -83,13 +84,23 @@ function App() {
     }
   }, []);
 
-  // Quietly check for a new release a few seconds after launch; the prompt only
+  // Quietly check for a new release a few seconds after launch; the modal only
   // appears if one actually exists, so a normal start stays uninterrupted.
   useEffect(() => {
     const timer = setTimeout(() => {
-      void useUpdaterStore.getState().checkForUpdate({ silent: true });
+      void useUpdaterStore.getState().runLaunchCheck();
     }, 5000);
     return () => clearTimeout(timer);
+  }, []);
+
+  // While the app stays open, re-check on a fixed cadence so a release published
+  // mid-session is surfaced without a restart. A hit toasts once per version.
+  useEffect(() => {
+    const SIX_HOURS = 6 * 60 * 60 * 1000;
+    const timer = setInterval(() => {
+      void useUpdaterStore.getState().runPeriodicCheck();
+    }, SIX_HOURS);
+    return () => clearInterval(timer);
   }, []);
 
   // Stream Claude Code progress: the backend watcher emits appended transcript
@@ -173,6 +184,7 @@ function App() {
       <StatusBar />
       {settingsOpen && <SettingsModal />}
       <UpdateModal />
+      <UpdateToast />
       <SshPromptDialog />
     </div>
   );
