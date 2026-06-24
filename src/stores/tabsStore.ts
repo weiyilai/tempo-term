@@ -119,6 +119,49 @@ function moveItem<T>(items: readonly T[], from: number, to: number): T[] {
   return next;
 }
 
+/**
+ * The file path of the editor the user is currently focused on, derived from
+ * the active tab's active leaf so it follows what is actually on screen (including
+ * the focused pane of a split). Returns null when the focused pane is not an
+ * editor. This is the source of truth for "the file the user is looking at" —
+ * the legacy workspaceStore.activeFile was never wired up to tab navigation.
+ */
+export function activeEditorPath(
+  tabs: readonly Tab[],
+  activeId: string | null,
+): string | null {
+  const tab = tabs.find((t) => t.id === activeId);
+  if (!tab) {
+    return null;
+  }
+  const content = findPaneContent(tab.paneTree, tab.activeLeafId);
+  return content?.kind === "editor" ? content.path : null;
+}
+
+export function tabHasDirtyEditor(
+  tab: Tab,
+  buffers: Record<string, { content: string; baseline: string }>,
+): boolean {
+  return computeLayout(tab.paneTree).some((p) => {
+    if (p.content.kind !== "editor") return false;
+    const buf = buffers[p.content.path];
+    return buf ? buf.content !== buf.baseline : false;
+  });
+}
+
+/** Every distinct file path currently shown in an editor pane, across all tabs. */
+export function openEditorPaths(tabs: Tab[]): string[] {
+  const paths = new Set<string>();
+  for (const tab of tabs) {
+    for (const pane of computeLayout(tab.paneTree)) {
+      if (pane.content.kind === "editor") {
+        paths.add(pane.content.path);
+      }
+    }
+  }
+  return [...paths];
+}
+
 /** True when a tab is a single, unsplit leaf showing exactly `content`. */
 function singleLeafContentEquals(tab: Tab, content: PaneContent): boolean {
   if (tab.paneTree.kind !== "leaf") {

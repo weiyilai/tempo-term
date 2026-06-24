@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { TabBar } from "@/components/TabBar";
 import { Sidebar } from "@/components/Sidebar";
 import { Resizer } from "@/components/Resizer";
@@ -10,10 +11,14 @@ import { TabsArea } from "@/components/TabsArea";
 import { useUiStore } from "@/stores/uiStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import { useSettingsStore } from "@/stores/settingsStore";
-import { useTabsStore } from "@/stores/tabsStore";
+import { useTabsStore, tabHasDirtyEditor } from "@/stores/tabsStore";
+import { useEditorStore } from "@/modules/editor/store/editorStore";
+import { installEditorBufferSync } from "@/modules/editor/lib/syncBuffers";
+import { computeLayout } from "@/modules/terminal/lib/terminalLayout";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { pruneTerminalHistory } from "@/modules/terminal/lib/terminalHistory";
 import { leafIds } from "@/modules/terminal/lib/terminalLayout";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { applyTheme, getTheme } from "@/themes/themes";
 import { listen } from "@tauri-apps/api/event";
 import { useProgressStore } from "@/modules/claude-progress/lib/progressStore";
@@ -33,10 +38,12 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function App() {
+  const { t } = useTranslation();
   const themeId = useSettingsStore((s) => s.themeId);
   const sidebarVisible = useUiStore((s) => s.sidebarVisible);
   const settingsOpen = useUiStore((s) => s.settingsOpen);
   const [sidebarWidth, setSidebarWidth] = useState(260);
+  const [pendingCloseAction, setPendingCloseAction] = useState<(() => void) | null>(null);
 
   useWatchSessions();
   useWatchNotes();
@@ -56,6 +63,10 @@ function App() {
     const keep = useTabsStore.getState().tabs.flatMap((t) => leafIds(t.paneTree));
     void pruneTerminalHistory(keep).catch(() => {});
   }, []);
+
+  // Forget an editor buffer once its file leaves every tab/pane, so closing a
+  // file without saving discards the edit instead of resurrecting it on reopen.
+  useEffect(() => installEditorBufferSync(), []);
 
   // In a secondary window, close this window's PTY sessions before it is
   // destroyed so no background shells leak. No-op in the main window.
@@ -139,7 +150,34 @@ function App() {
         }
       } else if (key === "w") {
         e.preventDefault();
-        useTabsStore.getState().closePaneOrTab();
+        const tabsState = useTabsStore.getState();
+        const tab = tabsState.tabs.find((t) => t.id === tabsState.activeId);
+        if (!tab) {
+          return;
+        }
+        const panes = computeLayout(tab.paneTree);
+        const buffers = useEditorStore.getState().buffers;
+        if (panes.length <= 1) {
+          if (tabHasDirtyEditor(tab, buffers)) {
+            setPendingCloseAction(() => () => tabsState.closeTab(tab.id));
+          } else {
+            tabsState.closePaneOrTab();
+          }
+        } else {
+          // Closing the bottom-right pane (same selection as closePaneOrTab).
+          const target = panes.reduce((a, b) => {
+            if (b.rect.top !== a.rect.top) return b.rect.top > a.rect.top ? b : a;
+            return b.rect.left > a.rect.left ? b : a;
+          });
+          const targetBuf =
+            target.content.kind === "editor" ? buffers[target.content.path] : undefined;
+          const targetDirty = targetBuf ? targetBuf.content !== targetBuf.baseline : false;
+          if (targetDirty) {
+            setPendingCloseAction(() => () => tabsState.closePane(tab.id, target.id));
+          } else {
+            tabsState.closePaneOrTab();
+          }
+        }
       } else if (key === "p") {
         e.preventDefault();
         useUiStore.getState().openFileFinder();
@@ -186,6 +224,19 @@ function App() {
       <UpdateModal />
       <UpdateToast />
       <SshPromptDialog />
+      {pendingCloseAction && (
+        <ConfirmDialog
+          title={t("editor:closeUnsavedTitle")}
+          message={t("editor:closeUnsavedMessage")}
+          confirmLabel={t("editor:discardClose")}
+          cancelLabel={t("actions.cancel")}
+          onConfirm={() => {
+            pendingCloseAction();
+            setPendingCloseAction(null);
+          }}
+          onCancel={() => setPendingCloseAction(null)}
+        />
+      )}
     </div>
   );
 }

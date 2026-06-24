@@ -12,6 +12,7 @@ import { Combobox } from "@/components/Combobox";
 import { fsReadFile } from "@/modules/explorer/lib/fsBridge";
 import { basename } from "@/modules/explorer/lib/paths";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { activeEditorPath, useTabsStore } from "@/stores/tabsStore";
 import { useEditorStore } from "@/modules/editor/store/editorStore";
 import {
   insertIntoActiveTerminal,
@@ -118,12 +119,15 @@ export function AIView() {
   const setTerminalContext = useChatStore((s) => s.setTerminalContext);
 
   const rootPath = useWorkspaceStore((s) => s.rootPath);
-  const activeFile = useWorkspaceStore((s) => s.activeFile);
+  // Derive the file in focus from the active tab/pane: the editor uses the tabs
+  // store, while workspaceStore.activeFile was never updated on tab navigation.
+  const activeFile = useTabsStore((s) => activeEditorPath(s.tabs, s.activeId));
 
   const provider = providerById(providerId);
   const [hasKey, setHasKey] = useState(true);
   const [input, setInput] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   // IME composition tracking so the Enter that confirms a candidate never sends.
   const composingRef = useRef(false);
   const lastCompositionEndRef = useRef(0);
@@ -141,6 +145,17 @@ export function AIView() {
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight });
   }, [messages, sending]);
+
+  // Grow the input with its content (capped), so it starts aligned with the
+  // send/terminal buttons and only expands when the message spans more lines.
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) {
+      return;
+    }
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, [input]);
 
   function grabTerminal() {
     const raw = readActiveTerminalBuffer();
@@ -179,6 +194,7 @@ export function AIView() {
           }}
           ariaLabel={t("provider")}
           className="min-w-0 flex-1"
+          textClassName="text-[13px]"
         />
         <Combobox
           value={model}
@@ -188,6 +204,7 @@ export function AIView() {
           editable
           placeholder={t("modelPlaceholder")}
           className="min-w-0 flex-1"
+          textClassName="text-[13px]"
         />
         <button
           type="button"
@@ -327,8 +344,9 @@ export function AIView() {
             <SquareTerminal size={16} />
           </button>
           <textarea
+            ref={inputRef}
             value={input}
-            rows={2}
+            rows={1}
             placeholder={t("placeholder")}
             onChange={(e) => setInput(e.target.value)}
             onCompositionStart={() => {
@@ -358,7 +376,7 @@ export function AIView() {
               e.preventDefault();
               submit();
             }}
-            className="min-h-0 w-full resize-none rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg outline-none focus:border-accent"
+            className="min-h-9 max-h-40 w-full resize-none overflow-y-auto rounded-md border border-border bg-bg px-3 py-1.5 text-sm leading-5 text-fg outline-none focus:border-accent"
           />
           <button
             type="button"

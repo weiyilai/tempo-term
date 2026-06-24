@@ -1,9 +1,18 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { useTabsStore, migratePersistedTabs, type Tab } from "./tabsStore";
+import {
+  activeEditorPath,
+  openEditorPaths,
+  tabHasDirtyEditor,
+  useTabsStore,
+  migratePersistedTabs,
+  type Tab,
+} from "./tabsStore";
 import {
   computeLayout,
+  leaf,
   leafIds,
   paneOf,
+  splitLeaf,
   type LayoutNode,
 } from "@/modules/terminal/lib/terminalLayout";
 
@@ -24,6 +33,30 @@ function firstLeafContent(tab: Tab) {
   const node = tab.paneTree as Extract<LayoutNode, { kind: "leaf" }>;
   return paneOf(node);
 }
+
+describe("openEditorPaths", () => {
+  beforeEach(reset);
+
+  it("collects editor paths across tabs and split panes", () => {
+    const store = useTabsStore.getState();
+    const t1 = store.openEditorTab("/a.ts");
+    store.openEditorTab("/b.ts");
+    const tab1 = useTabsStore.getState().tabs.find((t) => t.id === t1)!;
+    useTabsStore
+      .getState()
+      .splitPaneWith(t1, tab1.activeLeafId, { kind: "editor", path: "/c.ts" }, "row");
+    expect(openEditorPaths(useTabsStore.getState().tabs).sort()).toEqual([
+      "/a.ts",
+      "/b.ts",
+      "/c.ts",
+    ]);
+  });
+
+  it("ignores non-editor panes", () => {
+    useTabsStore.getState().newTerminalTab();
+    expect(openEditorPaths(useTabsStore.getState().tabs)).toEqual([]);
+  });
+});
 
 describe("tabsStore", () => {
   beforeEach(reset);
@@ -417,5 +450,127 @@ describe("migratePersistedTabs", () => {
     expect(firstLeafContent(byId("t5"))).toEqual({ kind: "git-graph" });
     expect(byId("t2").title).toBe("b.ts");
     expect(byId("t2").activeLeafId).toBe(leafIds(byId("t2").paneTree)[0]);
+  });
+});
+
+describe("tabHasDirtyEditor", () => {
+  function editorTab(id: string, leafId: string, path: string): Tab {
+    return {
+      id,
+      spaceId: "s1",
+      title: "x",
+      kind: "editor",
+      paneTree: leaf(leafId, { kind: "editor", path }),
+      activeLeafId: leafId,
+    };
+  }
+
+  it("returns false for a terminal tab with no editor panes", () => {
+    const tab: Tab = {
+      id: "t1",
+      spaceId: "s1",
+      title: "x",
+      kind: "terminal",
+      paneTree: leaf("l1", { kind: "terminal" }),
+      activeLeafId: "l1",
+    };
+    expect(tabHasDirtyEditor(tab, {})).toBe(false);
+  });
+
+  it("returns false for an editor tab with a clean buffer", () => {
+    const tab = editorTab("t1", "l1", "/a/b.ts");
+    const buffers = { "/a/b.ts": { content: "hello", baseline: "hello" } };
+    expect(tabHasDirtyEditor(tab, buffers)).toBe(false);
+  });
+
+  it("returns false when the buffer has not been loaded yet", () => {
+    const tab = editorTab("t1", "l1", "/a/b.ts");
+    expect(tabHasDirtyEditor(tab, {})).toBe(false);
+  });
+
+  it("returns true when an editor pane has unsaved changes", () => {
+    const tab = editorTab("t1", "l1", "/a/b.ts");
+    const buffers = { "/a/b.ts": { content: "changed", baseline: "original" } };
+    expect(tabHasDirtyEditor(tab, buffers)).toBe(true);
+  });
+
+  it("returns true when any pane in a split tab is dirty", () => {
+    const tree = splitLeaf(
+      leaf("l1", { kind: "editor", path: "/a/clean.ts" }),
+      "l1",
+      "row",
+      "l2",
+      { kind: "editor", path: "/a/dirty.ts" },
+    );
+    const tab: Tab = {
+      id: "t1",
+      spaceId: "s1",
+      title: "x",
+      kind: "editor",
+      paneTree: tree,
+      activeLeafId: "l1",
+    };
+    const buffers = {
+      "/a/clean.ts": { content: "ok", baseline: "ok" },
+      "/a/dirty.ts": { content: "changed", baseline: "original" },
+    };
+    expect(tabHasDirtyEditor(tab, buffers)).toBe(true);
+  });
+});
+
+describe("activeEditorPath", () => {
+  function editorTab(id: string, leafId: string, path: string): Tab {
+    return {
+      id,
+      spaceId: "s1",
+      title: "x",
+      kind: "editor",
+      paneTree: leaf(leafId, { kind: "editor", path }),
+      activeLeafId: leafId,
+    };
+  }
+
+  it("returns the path of the active editor tab", () => {
+    const tab = editorTab("t1", "l1", "/repo/App.vue");
+    expect(activeEditorPath([tab], "t1")).toBe("/repo/App.vue");
+  });
+
+  it("returns null when the active pane is a terminal", () => {
+    const tab: Tab = {
+      id: "t1",
+      spaceId: "s1",
+      title: "x",
+      kind: "terminal",
+      paneTree: leaf("l1", { kind: "terminal" }),
+      activeLeafId: "l1",
+    };
+    expect(activeEditorPath([tab], "t1")).toBeNull();
+  });
+
+  it("returns null when there is no active tab", () => {
+    const tab = editorTab("t1", "l1", "/repo/App.vue");
+    expect(activeEditorPath([tab], null)).toBeNull();
+    expect(activeEditorPath([tab], "missing")).toBeNull();
+  });
+
+  it("tracks the focused pane in a split tab", () => {
+    // editor on the left, a terminal split into the right.
+    const tree = splitLeaf(
+      leaf("l1", { kind: "editor", path: "/repo/App.vue" }),
+      "l1",
+      "row",
+      "l2",
+      { kind: "terminal" },
+    );
+    const tab: Tab = {
+      id: "t1",
+      spaceId: "s1",
+      title: "x",
+      kind: "editor",
+      paneTree: tree,
+      activeLeafId: "l1",
+    };
+    expect(activeEditorPath([tab], "t1")).toBe("/repo/App.vue");
+    expect(activeEditorPath([{ ...tab, activeLeafId: "l2" }], "t1")).toBeNull();
   });
 });
