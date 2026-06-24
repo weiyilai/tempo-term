@@ -4,8 +4,13 @@ import { Columns2, Eye, SquarePen, WrapText, type LucideIcon } from "lucide-reac
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView as CMView } from "@codemirror/view";
 import { editorSyntaxTheme } from "@/themes/editorTheme";
-import { languageExtension } from "./lib/language";
+import { languageExtension, languageLabel } from "./lib/language";
+import { inlineCompletion, type CompletionRequest } from "./lib/inlineCompletion";
 import { useEditorStore } from "./store/editorStore";
+import { aiChat } from "@/modules/ai/lib/aiBridge";
+import { providerById } from "@/modules/ai/lib/providers";
+import { useChatStore } from "@/modules/ai/store/chatStore";
+import { buildCompletionMessages, cleanCompletion } from "@/modules/ai/lib/completion";
 import { shouldReloadFromDisk } from "./lib/reload";
 import { fsReadFile, fsWriteFile } from "@/modules/explorer/lib/fsBridge";
 import { basename } from "@/modules/explorer/lib/paths";
@@ -26,6 +31,24 @@ function isMarkdownPath(path: string): boolean {
   return /\.(md|markdown|mdx)$/i.test(path);
 }
 
+/** Ask the active chat provider to complete the code around the cursor. */
+async function requestCompletion(
+  prefix: string,
+  suffix: string,
+  language: string,
+): Promise<string> {
+  const { providerId, model } = useChatStore.getState();
+  const provider = providerById(providerId);
+  const reply = await aiChat({
+    provider: provider.id,
+    kind: provider.kind,
+    baseUrl: provider.baseUrl,
+    model,
+    messages: buildCompletionMessages(prefix, suffix, language),
+  });
+  return cleanCompletion(reply, prefix);
+}
+
 /** One open file. Each editor tab renders a single file with its own buffer. */
 export function EditorTabContent({ path }: { path: string }) {
   const { t } = useTranslation("editor");
@@ -39,6 +62,7 @@ export function EditorTabContent({ path }: { path: string }) {
   const themeId = useSettingsStore((s) => s.themeId);
   const wordWrap = useSettingsStore((s) => s.wordWrap);
   const toggleWordWrap = useSettingsStore((s) => s.toggleWordWrap);
+  const aiInlineCompletionEnabled = useSettingsStore((s) => s.aiInlineCompletion);
 
   const isMarkdown = isMarkdownPath(path);
   const [mode, setMode] = useState<EditorMode>("edit");
@@ -55,17 +79,23 @@ export function EditorTabContent({ path }: { path: string }) {
       .catch(() => setBaseline(path, ""));
   }, [path, setBaseline]);
 
-  const extensions = useMemo(
-    () => [
+  const extensions = useMemo(() => {
+    const base = [
       CMView.theme({
         "&": { height: "100%", fontSize: `${fontSize}px` },
         ".cm-content, .cm-gutters, .cm-scroller": { fontFamily },
       }),
       ...(wordWrap ? [CMView.lineWrapping] : []),
       ...languageExtension(path),
-    ],
-    [path, fontFamily, fontSize, wordWrap],
-  );
+    ];
+    if (aiInlineCompletionEnabled) {
+      const language = languageLabel(path);
+      const request: CompletionRequest = (prefix, suffix) =>
+        requestCompletion(prefix, suffix, language);
+      base.push(inlineCompletion(request));
+    }
+    return base;
+  }, [path, fontFamily, fontSize, wordWrap, aiInlineCompletionEnabled]);
 
   async function save() {
     const current = useEditorStore.getState().contentOf(path);
