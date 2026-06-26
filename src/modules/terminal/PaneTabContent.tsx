@@ -218,7 +218,7 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
                 height: `${pane.rect.height}%`,
               }}
               className={`p-1 ${
-                multiple ? (active ? "border border-accent" : "border border-border") : ""
+                multiple ? (active ? "border border-accent/40" : "border border-border") : ""
               }`}
             >
               {multiple && (
