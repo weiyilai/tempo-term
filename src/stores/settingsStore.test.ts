@@ -19,6 +19,8 @@ describe("settingsStore", () => {
       wordWrap: initialState.wordWrap,
       workspaceCard: { status: true, branch: true, cwd: true, pr: true },
       prSource: "auto",
+      claudeFlags: initialState.claudeFlags,
+      codexFlags: initialState.codexFlags,
     });
   });
 
@@ -106,5 +108,20 @@ describe("settingsStore", () => {
     expect(useSettingsStore.getState().aiTerminalContext).toBe(true);
     useSettingsStore.getState().setAiTerminalContext(false);
     expect(useSettingsStore.getState().aiTerminalContext).toBe(false);
+  });
+
+  it("defaults the launcher flags empty and updates them independently", () => {
+    expect(useSettingsStore.getState().claudeFlags).toBe("");
+    expect(useSettingsStore.getState().codexFlags).toBe("");
+    useSettingsStore.getState().setClaudeFlags("--model opus");
+    useSettingsStore.getState().setCodexFlags("--full-auto");
+    expect(useSettingsStore.getState().claudeFlags).toBe("--model opus");
+    expect(useSettingsStore.getState().codexFlags).toBe("--full-auto");
+  });
+
+  it("persists the launcher flags so they survive a reload", () => {
+    useSettingsStore.getState().setClaudeFlags("--model opus");
+    const persisted = localStorage.getItem("tempoterm-settings");
+    expect(persisted).toContain("--model opus");
   });
 });

@@ -103,6 +103,10 @@ export function WorkspaceSettingsSection() {
   const setStatusTracking = useSettingsStore((s) => s.setClaudeStatusTracking);
   const notifications = useSettingsStore((s) => s.claudeNotifications);
   const setNotifications = useSettingsStore((s) => s.setClaudeNotifications);
+  const claudeFlags = useSettingsStore((s) => s.claudeFlags);
+  const setClaudeFlags = useSettingsStore((s) => s.setClaudeFlags);
+  const codexFlags = useSettingsStore((s) => s.codexFlags);
+  const setCodexFlags = useSettingsStore((s) => s.setCodexFlags);
   const [ghReady, setGhReady] = useState<boolean | null>(null);
 
   async function toggleStatusTracking(checked: boolean) {
@@ -187,6 +191,33 @@ export function WorkspaceSettingsSection() {
         />
         {t("workspace.notificationsLabel")}
       </label>
+
+      <label className="mb-1 block text-sm font-medium text-fg">
+        {t("workspace.launcherFlagsTitle")}
+      </label>
+      <p className="mb-2 text-xs text-fg-muted">{t("workspace.launcherFlagsDescription")}</p>
+      <div className="mb-6 space-y-2">
+        <label className="flex items-center gap-3 text-sm text-fg">
+          <span className="shrink-0 whitespace-nowrap">{t("workspace.claudeFlagsLabel")}</span>
+          <input
+            type="text"
+            value={claudeFlags}
+            placeholder={t("workspace.claudeFlagsPlaceholder")}
+            onChange={(e) => setClaudeFlags(e.target.value)}
+            className="flex-1 rounded-md border border-border bg-bg px-2 py-1 font-mono text-sm text-fg outline-none focus:border-accent"
+          />
+        </label>
+        <label className="flex items-center gap-3 text-sm text-fg">
+          <span className="shrink-0 whitespace-nowrap">{t("workspace.codexFlagsLabel")}</span>
+          <input
+            type="text"
+            value={codexFlags}
+            placeholder={t("workspace.codexFlagsPlaceholder")}
+            onChange={(e) => setCodexFlags(e.target.value)}
+            className="flex-1 rounded-md border border-border bg-bg px-2 py-1 font-mono text-sm text-fg outline-none focus:border-accent"
+          />
+        </label>
+      </div>
 
       <label className="mb-1 block text-sm font-medium text-fg">{t("workspace.prTitle")}</label>
       <p className="mb-2 text-xs text-fg-muted">{t("workspace.prDescription")}</p>

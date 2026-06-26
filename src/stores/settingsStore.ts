@@ -44,6 +44,10 @@ interface SettingsState {
   workspaceCard: WorkspaceCardBlocks;
   /** Where workspace cards source PR data. */
   prSource: WorkspacePrSource;
+  /** Default flags appended to the `claude` command when launched from the launcher. */
+  claudeFlags: string;
+  /** Default flags appended to the `codex` command when launched from the launcher. */
+  codexFlags: string;
   /** Install the Claude Code hook that reports live session status to cards. */
   claudeStatusTracking: boolean;
   /**
@@ -69,6 +73,8 @@ interface SettingsState {
   setNotesFolderPath: (path: string | null) => void;
   setWorkspaceCardBlock: (key: keyof WorkspaceCardBlocks, value: boolean) => void;
   setPrSource: (source: WorkspacePrSource) => void;
+  setClaudeFlags: (flags: string) => void;
+  setCodexFlags: (flags: string) => void;
   setClaudeStatusTracking: (value: boolean) => void;
   setClaudeNotifications: (value: boolean) => void;
   setAiInlineCompletion: (value: boolean) => void;
@@ -111,6 +117,8 @@ export const useSettingsStore = create<SettingsState>()(
       notesFolderPath: null,
       workspaceCard: DEFAULT_WORKSPACE_CARD,
       prSource: "auto",
+      claudeFlags: "",
+      codexFlags: "",
       claudeStatusTracking: true,
       claudeNotifications: true,
       aiInlineCompletion: false,
@@ -127,6 +135,8 @@ export const useSettingsStore = create<SettingsState>()(
       setWorkspaceCardBlock: (key, value) =>
         set((state) => ({ workspaceCard: { ...state.workspaceCard, [key]: value } })),
       setPrSource: (prSource) => set({ prSource }),
+      setClaudeFlags: (claudeFlags) => set({ claudeFlags }),
+      setCodexFlags: (codexFlags) => set({ codexFlags }),
       setClaudeStatusTracking: (value) => set({ claudeStatusTracking: value }),
       setClaudeNotifications: (value) => set({ claudeNotifications: value }),
       setAiInlineCompletion: (value) => set({ aiInlineCompletion: value }),

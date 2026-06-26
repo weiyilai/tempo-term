@@ -23,6 +23,7 @@ import { pickFile, pickFolder } from "@/lib/dialog";
 import { IS_MAC } from "@/lib/platform";
 import type { PaneContent } from "@/modules/terminal/lib/terminalLayout";
 import { ConnectionForm } from "@/modules/ssh/ConnectionForm";
+import { buildLauncherCommand } from "./launcherCommand";
 
 const DEFAULT_PREVIEW_URL = "http://localhost:3000";
 
@@ -149,13 +150,19 @@ export function LauncherPanel({ target }: LauncherPanelProps) {
           key: "claude-code",
           label: t("workspace.claudeCode"),
           icon: Sparkles,
-          run: () => openTerminalWithCommand("claude"),
+          run: () =>
+            openTerminalWithCommand(
+              buildLauncherCommand("claude", useSettingsStore.getState().claudeFlags),
+            ),
         },
         {
           key: "codex",
           label: t("workspace.codex"),
           icon: Bot,
-          run: () => openTerminalWithCommand("codex"),
+          run: () =>
+            openTerminalWithCommand(
+              buildLauncherCommand("codex", useSettingsStore.getState().codexFlags),
+            ),
         },
         {
           key: "terminal",
