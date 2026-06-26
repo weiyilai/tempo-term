@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Loader2, WifiOff } from "lucide-react";
 import { consumeFreshSshLeaf } from "@/modules/ssh/lib/freshSshLeaves";
 import { createTerminal, enableWebglRenderer, type TerminalHandle } from "./lib/createTerminal";
+import { createOutputWriter } from "./lib/outputWriter";
 import { SearchBar } from "./SearchBar";
 import { openPty, type PtySession } from "./lib/pty-bridge";
 import { openSsh, type SshSession } from "@/modules/ssh/lib/ssh-bridge";
@@ -104,6 +105,17 @@ async function getHomeDir(): Promise<string | null> {
   return homeDirCache;
 }
 
+/** Human-readable byte size for the overload notice (e.g. 12 KB, 3.4 MB). */
+function formatSkipped(bytes: number): string {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+  if (bytes >= 1024) {
+    return `${Math.round(bytes / 1024)} KB`;
+  }
+  return `${bytes} B`;
+}
+
 interface TerminalViewProps {
   active: boolean;
   /** When true, this pane drives the file explorer root from its shell CWD. */
@@ -173,6 +185,16 @@ export function TerminalView({
   const [reconnectTrigger, setReconnectTrigger] = useState(0);
   const [externalFileDragging, setExternalFileDragging] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // Skipped-bytes total shown in the overload notice, or null when hidden. The
+  // refs throttle visible updates during a flood and auto-hide once it settles.
+  const [outputSkipped, setOutputSkipped] = useState<number | null>(null);
+  // The writer reports a lifetime cumulative dropped total; the baseline marks
+  // the total when the last notice closed, so each notice shows just this
+  // overload event's skipped bytes rather than an ever-growing lifetime sum.
+  const skippedTotalRef = useRef(0);
+  const skippedBaselineRef = useRef(0);
+  const skippedShowTimer = useRef<number | null>(null);
+  const skippedHideTimer = useRef<number | null>(null);
   const dragDepthRef = useRef(0);
   const nativeDragPathsRef = useRef<string[]>([]);
   // The hover action card (IP / host:port / archive quick commands), positioned
@@ -211,6 +233,26 @@ export function TerminalView({
     setActionCard(null);
   };
 
+  // Surface the overload notice when the output writer sheds data. Visible
+  // updates are throttled so a sustained flood doesn't itself thrash React, and
+  // the notice auto-hides once output stops being dropped.
+  const noteDroppedOutput = (total: number) => {
+    skippedTotalRef.current = total;
+    if (skippedShowTimer.current === null) {
+      skippedShowTimer.current = window.setTimeout(() => {
+        skippedShowTimer.current = null;
+        setOutputSkipped(skippedTotalRef.current - skippedBaselineRef.current);
+      }, 250);
+    }
+    if (skippedHideTimer.current !== null) {
+      clearTimeout(skippedHideTimer.current);
+    }
+    skippedHideTimer.current = window.setTimeout(() => {
+      setOutputSkipped(null);
+      skippedBaselineRef.current = skippedTotalRef.current;
+    }, 2500);
+  };
+
   // Clear any pending action-card hide timer when the pane unmounts so it can't
   // fire a state update on a gone component.
   useEffect(() => {
@@ -243,6 +285,14 @@ export function TerminalView({
     // DOM renderer on its own if WebGL is unavailable; term.dispose() (cleanup
     // below) tears the addon down with the terminal.
     enableWebglRenderer(term);
+
+    // Batch live PTY/SSH output through a frame-scheduled writer so a flood
+    // (cat a huge file, runaway logs) can't block the UI thread. One-shot writes
+    // (restored history, error notices) still go straight to the terminal.
+    const outputWriter = createOutputWriter({
+      write: (chunk) => term.write(chunk),
+      onDrop: (total) => noteDroppedOutput(total),
+    });
 
     // The session-status hook (see claude_status_hook) emits OSC 6973 on this
     // pane's tty when Claude changes state. Capture it here, where we know the
@@ -595,7 +645,7 @@ export function TerminalView({
           cols: term.cols,
           rows: term.rows,
           forwards,
-          onData: (bytes) => term.write(bytes),
+          onData: (bytes) => outputWriter.push(bytes),
           // Only treat an exit as user-facing when we did not tear the session
           // down ourselves (e.g. React StrictMode's mount/unmount/remount in dev).
           onExit: (_code) => {
@@ -621,7 +671,7 @@ export function TerminalView({
         // Read the setting at spawn time so a restored pane reflects the current
         // value, instead of racing a global flag set after mount.
         suggestions: useSettingsStore.getState().terminalSuggestions,
-        onData: (bytes) => term.write(bytes),
+        onData: (bytes) => outputWriter.push(bytes),
         // Only treat an exit as user-facing when we did not tear the session
         // down ourselves (e.g. React StrictMode's mount/unmount/remount in dev).
         onExit: () => {
@@ -761,6 +811,9 @@ export function TerminalView({
 
     return () => {
       disposed = true;
+      outputWriter.dispose();
+      if (skippedShowTimer.current !== null) clearTimeout(skippedShowTimer.current);
+      if (skippedHideTimer.current !== null) clearTimeout(skippedHideTimer.current);
       cancelAnimationFrame(initialFitFrame);
       clearInterval(snapshotTimer);
       writeListener.dispose();
@@ -1175,6 +1228,11 @@ export function TerminalView({
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-2 text-fg-subtle">
           <Loader2 size={15} className="animate-spin" />
           <span className="text-xs">{t("terminalConnecting")}</span>
+        </div>
+      )}
+      {outputSkipped !== null && (
+        <div className="pointer-events-none absolute left-1/2 top-3 -translate-x-1/2 rounded-md border border-border-strong bg-bg-elevated px-3 py-1 text-xs text-fg-muted shadow-lg">
+          {t("outputThrottled", { size: formatSkipped(outputSkipped) })}
         </div>
       )}
       {sshDisconnected && !connecting && (
