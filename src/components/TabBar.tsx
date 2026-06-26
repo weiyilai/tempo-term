@@ -7,6 +7,7 @@ import {
   Globe,
   LayoutGrid,
   PanelLeft,
+  Pencil,
   Plus,
   SquareTerminal,
   X,
@@ -32,6 +33,7 @@ import { useEditorStore } from "@/modules/editor/store/editorStore";
 import { useUiStore } from "@/stores/uiStore";
 import { SpaceDropdown } from "./SpaceDropdown";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { ContextMenu } from "./ContextMenu";
 
 // Module-level so the reference stays stable across renders. Passing an inline
 // options object would make useSensor/useSensors return a new sensors array on
@@ -73,17 +75,40 @@ function TabItem({ id }: { id: string }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [confirmClose, setConfirmClose] = useState(false);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   if (!tab) {
     return null;
   }
   const active = tab.id === activeId;
   const Icon = tabIcon(tab.kind);
 
+  function startRename() {
+    // `tab` is narrowed at line 80, but TS does not carry that into this
+    // closure, so the guard is required to compile (same reason `commit` below
+    // uses `tab &&`).
+    if (!tab) {
+      return;
+    }
+    setDraft(tab.title);
+    setEditing(true);
+  }
+
   function commit() {
     if (tab && draft.trim()) {
       setTabTitle(tab.id, draft.trim());
     }
     setEditing(false);
+  }
+
+  function requestClose() {
+    if (!tab) {
+      return;
+    }
+    if (dirty) {
+      setConfirmClose(true);
+    } else {
+      closeTab(tab.id);
+    }
   }
 
   return (
@@ -98,9 +123,10 @@ function TabItem({ id }: { id: string }) {
       role="tab"
       aria-selected={active}
       onClick={() => setActive(tab.id)}
-      onDoubleClick={() => {
-        setDraft(tab.title);
-        setEditing(true);
+      onDoubleClick={startRename}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenu({ x: e.clientX, y: e.clientY });
       }}
       title={tab.title}
       className={`group flex h-7 cursor-pointer items-center gap-2 rounded-md px-3 text-xs transition-colors ${
@@ -116,6 +142,7 @@ function TabItem({ id }: { id: string }) {
           onBlur={commit}
           onClick={(e) => e.stopPropagation()}
           onPointerDown={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.stopPropagation()}
           onKeyDown={(e) => {
             if (e.key === "Enter") commit();
             if (e.key === "Escape") setEditing(false);
@@ -131,11 +158,7 @@ function TabItem({ id }: { id: string }) {
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
-          if (dirty) {
-            setConfirmClose(true);
-          } else {
-            closeTab(tab.id);
-          }
+          requestClose();
         }}
         className="group/close rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
       >
@@ -165,6 +188,30 @@ function TabItem({ id }: { id: string }) {
             closeTab(tab.id);
           }}
           onCancel={() => setConfirmClose(false)}
+        />
+      )}
+      {menu && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          items={[
+            {
+              id: "rename",
+              label: t("actions.renameTab"),
+              icon: Pencil,
+              group: 0,
+              onSelect: startRename,
+            },
+            {
+              id: "close",
+              label: t("actions.closeTab"),
+              icon: X,
+              group: 1,
+              danger: true,
+              onSelect: requestClose,
+            },
+          ]}
         />
       )}
     </div>
