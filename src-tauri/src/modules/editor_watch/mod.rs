@@ -8,8 +8,8 @@
 //! events a per-file watch would miss — then filters events down to exactly the
 //! tracked paths before notifying the frontend.
 
-use std::collections::HashSet;
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use notify::event::{EventKind, ModifyKind};
@@ -19,7 +19,8 @@ use tauri::{AppHandle, Emitter, State};
 
 const EDITOR_FILE_CHANGED_EVENT: &str = "editor-file-changed";
 
-/// Payload emitted to the frontend: the absolute path that changed.
+/// Payload emitted to the frontend: the path that changed, in the exact form the
+/// frontend originally sent (so its editor tab still matches).
 #[derive(Clone, Serialize)]
 struct EditorFileChanged {
     path: String,
@@ -36,18 +37,28 @@ fn is_interesting_change(kind: &EventKind) -> bool {
     ) && !matches!(kind, EventKind::Modify(ModifyKind::Metadata(_)))
 }
 
-/// Holds the active watcher and the set of files it should report. Dropping the
-/// watcher stops the OS-level subscription.
+/// Canonicalize a path for matching: resolves symlinks (macOS reports `/var/…`
+/// as `/private/var/…`) and normalizes case (Windows) and separators, so a
+/// watcher event lines up with the file we tracked. Falls back to the path as-is
+/// when canonicalize fails — e.g. the file was just removed — so delete events
+/// can still match.
+fn canonical_key(path: &Path) -> PathBuf {
+    std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+/// Holds the active watcher and the files it should report, keyed by canonical
+/// path → the original path the frontend sent. Dropping the watcher stops the
+/// OS-level subscription.
 pub struct EditorWatchState {
     watcher: Mutex<Option<RecommendedWatcher>>,
-    watched: Arc<Mutex<HashSet<PathBuf>>>,
+    watched: Arc<Mutex<HashMap<PathBuf, String>>>,
 }
 
 impl EditorWatchState {
     pub fn new() -> Self {
         Self {
             watcher: Mutex::new(None),
-            watched: Arc::new(Mutex::new(HashSet::new())),
+            watched: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 }
@@ -60,7 +71,7 @@ impl Default for EditorWatchState {
 
 fn build_watcher(
     app: &AppHandle,
-    watched: Arc<Mutex<HashSet<PathBuf>>>,
+    watched: Arc<Mutex<HashMap<PathBuf, String>>>,
 ) -> Result<RecommendedWatcher, String> {
     let app_cb = app.clone();
     notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
@@ -71,17 +82,17 @@ fn build_watcher(
         if !is_interesting_change(&event.kind) {
             return;
         }
-        let set = watched.lock().unwrap();
+        let map = watched.lock().unwrap();
         for path in &event.paths {
-            if set.contains(path) {
-                if let Some(s) = path.to_str() {
-                    let _ = app_cb.emit(
-                        EDITOR_FILE_CHANGED_EVENT,
-                        EditorFileChanged {
-                            path: s.to_string(),
-                        },
-                    );
-                }
+            // Match on the canonical key (notify reports canonical paths), but
+            // emit the ORIGINAL path the frontend sent so its tab still matches.
+            if let Some(original) = map.get(&canonical_key(path)) {
+                let _ = app_cb.emit(
+                    EDITOR_FILE_CHANGED_EVENT,
+                    EditorFileChanged {
+                        path: original.clone(),
+                    },
+                );
             }
         }
     })
@@ -97,21 +108,24 @@ pub fn editor_watch_set(
     state: State<EditorWatchState>,
     paths: Vec<String>,
 ) -> Result<(), String> {
-    let path_bufs: Vec<PathBuf> = paths.iter().map(PathBuf::from).collect();
     {
-        let mut set = state.watched.lock().unwrap();
-        set.clear();
-        set.extend(path_bufs.iter().cloned());
+        let mut map = state.watched.lock().unwrap();
+        map.clear();
+        // Key by canonical path (to match watcher events), value is the original
+        // path the frontend sent (echoed back so its editor tab still matches).
+        for path in &paths {
+            map.insert(canonical_key(Path::new(path)), path.clone());
+        }
     }
-    if path_bufs.is_empty() {
+    if paths.is_empty() {
         *state.watcher.lock().unwrap() = None;
         return Ok(());
     }
     let mut watcher = build_watcher(&app, state.watched.clone())?;
     // Distinct parent dirs, so two files in the same folder share one watch.
     let mut dirs: HashSet<PathBuf> = HashSet::new();
-    for path in &path_bufs {
-        if let Some(dir) = path.parent() {
+    for path in &paths {
+        if let Some(dir) = Path::new(path).parent() {
             dirs.insert(dir.to_path_buf());
         }
     }
@@ -146,5 +160,22 @@ mod tests {
         assert!(!is_interesting_change(&EventKind::Modify(
             ModifyKind::Metadata(MetadataKind::Any)
         )));
+    }
+
+    #[test]
+    fn canonical_key_falls_back_when_the_path_is_missing() {
+        // A path that can't be canonicalized (doesn't exist) still needs a stable
+        // key so delete events match; it falls back to the input unchanged.
+        let missing = PathBuf::from("/no/such/dir/zzz_tempoterm_canon");
+        assert_eq!(canonical_key(&missing), missing);
+    }
+
+    #[test]
+    fn canonical_key_resolves_an_existing_path_to_an_absolute_real_path() {
+        // An existing path canonicalizes to an absolute, real path (symlinks and
+        // case resolved), which is what event matching keys on.
+        let key = canonical_key(&std::env::temp_dir());
+        assert!(key.is_absolute());
+        assert!(key.exists());
     }
 }
