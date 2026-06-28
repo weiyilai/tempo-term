@@ -13,8 +13,11 @@ export const IS_MAC =
     false);
 
 /**
- * Windows detection, used to swap in a custom title bar (the native one is
- * hidden via decorations) while macOS keeps its overlay title bar.
+ * Windows detection. Used to swap in a custom title bar (the native one is
+ * hidden via decorations, while macOS keeps its overlay title bar) and to route
+ * terminal Ctrl+V through the same smart paste flow as macOS (text wins, else a
+ * copied file's path). Linux has no native clipboard backend yet, so it keeps
+ * xterm's built-in paste.
  */
 export const IS_WINDOWS =
   typeof navigator !== "undefined" &&

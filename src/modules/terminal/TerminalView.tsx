@@ -1,7 +1,7 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Loader2, WifiOff } from "lucide-react";
+import { ClipboardPaste, Copy, Loader2, WifiOff } from "lucide-react";
 import { consumeFreshSshLeaf } from "@/modules/ssh/lib/freshSshLeaves";
 import { createTerminal, enableWebglRenderer, type TerminalHandle } from "./lib/createTerminal";
 import { createOutputWriter } from "./lib/outputWriter";
@@ -80,6 +80,7 @@ import { terminalKeySequence } from "./lib/terminalKeymap";
 import { shouldCdToRoot } from "./lib/cwdSync";
 import { debounce } from "@/lib/debounce";
 import { dropOverlayClassName } from "@/components/EntryDropOverlay";
+import { ContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import { fsHomeDir, fsReadFile } from "@/modules/explorer/lib/fsBridge";
 import { getDraggedEntry } from "@/modules/explorer/lib/dragEntry";
 import {
@@ -90,7 +91,7 @@ import {
 } from "@/modules/claude-progress/lib/sessionStatus";
 import { useSessionStatusStore } from "@/modules/claude-progress/lib/sessionStatusStore";
 
-import { IS_MAC, openModifierLabel } from "@/lib/platform";
+import { IS_MAC, IS_WINDOWS, openModifierLabel } from "@/lib/platform";
 import { selectTerminalFontFamily, useFontStore } from "@/stores/fontStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -203,6 +204,12 @@ export function TerminalView({
   const skippedHideTimer = useRef<number | null>(null);
   const dragDepthRef = useRef(0);
   const nativeDragPathsRef = useRef<string[]>([]);
+  // Right-click menu position; null when closed. Exposes Copy/Paste that run the
+  // same fast clipboard path as the keyboard shortcuts (see `pasteRef`), instead
+  // of the WebView2 native menu whose paste is slow.
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(null);
+  // Lets the right-click menu call the in-effect smart-paste handler.
+  const pasteRef = useRef<((kind: "ctrl" | "cmd") => void) | null>(null);
   // The hover action card (IP / host:port / archive quick commands), positioned
   // at the cursor. A short hide delay lets the pointer travel from the link into
   // the card without it vanishing.
@@ -366,6 +373,7 @@ export function TerminalView({
           break;
       }
     }
+    pasteRef.current = handleTerminalPaste;
 
     function isTerminalPasteShortcut(event: KeyboardEvent): "ctrl" | "cmd" | null {
       const isV = event.code === "KeyV" || event.key.toLowerCase() === "v";
@@ -377,6 +385,12 @@ export function TerminalView({
       }
       if (IS_MAC && event.metaKey && !event.ctrlKey) {
         return "cmd";
+      }
+      // Windows: Ctrl+V runs the same smart paste (text wins, else file paths)
+      // via handleTerminalPaste. Linux is intentionally excluded — it has no
+      // native clipboard backend, so it keeps xterm's built-in paste.
+      if (IS_WINDOWS && event.ctrlKey && !event.metaKey) {
+        return "ctrl";
       }
       return null;
     }
@@ -419,9 +433,23 @@ export function TerminalView({
       if (!activeRef.current || (target instanceof Node && !containerEl.contains(target))) {
         return;
       }
+      // macOS and Windows route paste through handleTerminalPaste (Ctrl/Cmd+V
+      // in the custom key handler), so the native event must be suppressed here
+      // to avoid a double paste. Linux has no custom paste handler, so let the
+      // event reach xterm's built-in paste — suppressing it there is what made
+      // Ctrl+V do nothing on Linux.
+      if (!IS_MAC && !IS_WINDOWS) {
+        return;
+      }
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
+      // Keyboard Ctrl/Cmd+V already preventDefaults on keydown, so this native
+      // paste event only fires for a non-keyboard paste (right-click or the Edit
+      // menu). Route it through the smart-paste flow so those paths work too,
+      // with no double paste. "cmd" keeps an empty clipboard a no-op rather than
+      // injecting the raw paste control byte.
+      void handleTerminalPaste("cmd");
     };
     document.addEventListener("paste", onPasteCapture, true);
 
@@ -1261,8 +1289,58 @@ export function TerminalView({
         const files = imageFilesFromDrop(event.dataTransfer);
         void handlePathDrop(paths, files);
       }}
+      onContextMenu={(event) => {
+        // Windows only: replace the WebView2 native menu (whose paste is slow,
+        // ~5s) with our own, backed by the same fast clipboard path as Ctrl+V.
+        // macOS and Linux keep their native menus — neither has the slow-paste
+        // problem, so there's no reason to override their richer native menu.
+        if (!IS_WINDOWS) {
+          return;
+        }
+        event.preventDefault();
+        setContextMenu({
+          x: event.clientX,
+          y: event.clientY,
+          hasSelection: handleRef.current?.term.hasSelection() ?? false,
+        });
+      }}
     >
       {externalFileDragging && <div className={dropOverlayClassName(true)} />}
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => setContextMenu(null)}
+          items={[
+            ...(contextMenu.hasSelection
+              ? [
+                  {
+                    id: "copy",
+                    label: t("terminalCopy"),
+                    icon: Copy,
+                    onSelect: () => {
+                      const term = handleRef.current?.term;
+                      if (term?.hasSelection()) {
+                        void navigator.clipboard.writeText(term.getSelection());
+                      }
+                    },
+                  } satisfies ContextMenuItem,
+                ]
+              : []),
+            {
+              id: "paste",
+              label: t("terminalPaste"),
+              icon: ClipboardPaste,
+              // "cmd" so an empty clipboard is a no-op; "ctrl" would inject the
+              // raw paste control byte, which a menu paste should never do.
+              onSelect: () => {
+                pasteRef.current?.("cmd");
+                handleRef.current?.term.focus();
+              },
+            } satisfies ContextMenuItem,
+          ]}
+        />
+      )}
       {actionCard && (
         <div
           className="fixed z-30"

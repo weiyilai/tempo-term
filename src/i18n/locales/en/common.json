@@ -2,6 +2,8 @@
   "appName": "TempoTerm",
   "tagline": "AI-powered terminal workspace",
   "terminalConnecting": "Starting shell…",
+  "terminalCopy": "Copy",
+  "terminalPaste": "Paste",
   "outputThrottled": "Output throttled, skipped {{size}} to keep the UI responsive",
   "openLinkHint": "{{mods}}-click to open",
   "actionLinks": {
