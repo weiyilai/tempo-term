@@ -61,6 +61,7 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
   const setPaneContent = useTabsStore((s) => s.setPaneContent);
   const setTerminalCwd = useTabsStore((s) => s.setTerminalCwd);
   const closePane = useTabsStore((s) => s.closePane);
+  const openHtmlPreview = useTabsStore((s) => s.openHtmlPreview);
   const isActiveTab = useTabsStore((s) => s.activeId === tab.id);
   const paneAreaRef = useRef<HTMLDivElement>(null);
   // Which splitter is currently being dragged, so its hairline keeps its
@@ -250,7 +251,17 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
                 }
               >
                 {pane.content.kind === "editor" ? (
-                  <EditorTabContent path={pane.content.path} />
+                  (() => {
+                    const editorPath = pane.content.path;
+                    return (
+                      <EditorTabContent
+                        path={editorPath}
+                        onOpenWebPreview={() =>
+                          openHtmlPreview(tab.id, pane.id, editorPath)
+                        }
+                      />
+                    );
+                  })()
                 ) : pane.content.kind === "note" ? (
                   <NoteTabContent
                     noteId={pane.content.noteId}

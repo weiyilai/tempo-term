@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   activeEditorPath,
+  localPreviewFilePaths,
   openEditorPaths,
   tabHasDirtyEditor,
   useTabsStore,
@@ -9,6 +10,7 @@ import {
 } from "./tabsStore";
 import {
   computeLayout,
+  findPaneContent,
   leaf,
   leafIds,
   paneOf,
@@ -591,6 +593,107 @@ describe("tabHasDirtyEditor", () => {
       "/a/dirty.ts": { content: "changed", baseline: "original" },
     };
     expect(tabHasDirtyEditor(tab, buffers)).toBe(true);
+  });
+});
+
+describe("openHtmlPreview", () => {
+  beforeEach(reset);
+
+  it("splits beside a single-pane editor tab", () => {
+    const store = useTabsStore.getState();
+    const tabId = store.openEditorTab("/proj/a.html");
+    const tab = useTabsStore.getState().tabs.find((t) => t.id === tabId)!;
+    useTabsStore.getState().openHtmlPreview(tabId, tab.activeLeafId, "/proj/a.html");
+    const updated = useTabsStore.getState().tabs.find((t) => t.id === tabId)!;
+    expect(updated.paneTree.kind).toBe("split");
+    const kinds = leafIds(updated.paneTree).map((id) => findPaneContent(updated.paneTree, id)?.kind);
+    expect(kinds).toContain("editor");
+    expect(kinds).toContain("preview");
+  });
+
+  it("opens a reusable preview tab when the source tab is already split", () => {
+    const tabId = useTabsStore.getState().openEditorTab("/proj/b.html");
+    // split the editor tab so it has no preview pane but is multi-pane
+    const tab = useTabsStore.getState().tabs.find((t) => t.id === tabId)!;
+    useTabsStore.getState().splitPaneWith(tabId, tab.activeLeafId, { kind: "terminal" }, "row");
+    const before = useTabsStore.getState().tabs.length;
+    useTabsStore.getState().openHtmlPreview(tabId, tab.activeLeafId, "/proj/b.html");
+    const tabs = useTabsStore.getState().tabs;
+    expect(tabs.length).toBe(before + 1);
+    const previewTab = tabs.find((t) => t.kind === "preview")!;
+    expect(previewTab.title).toBe("b.html");
+    // a second preview of a different file reuses the same preview tab
+    useTabsStore.getState().openHtmlPreview(tabId, tab.activeLeafId, "/proj/c.html");
+    expect(useTabsStore.getState().tabs.filter((t) => t.kind === "preview").length).toBe(1);
+    expect(useTabsStore.getState().tabs.find((t) => t.kind === "preview")!.title).toBe("c.html");
+  });
+
+  it("replaces the preview pane content in place when the tab already has a preview pane", () => {
+    const tabId = useTabsStore.getState().openEditorTab("/proj/a.html");
+    const tab = useTabsStore.getState().tabs.find((t) => t.id === tabId)!;
+    const editorLeafId = tab.activeLeafId;
+    // Split the editor with a preview pane so the tab already has a preview.
+    useTabsStore
+      .getState()
+      .splitPaneWith(tabId, editorLeafId, { kind: "preview", url: "file:///proj/old.html" }, "row");
+    const withPreview = useTabsStore.getState().tabs.find((t) => t.id === tabId)!;
+    const beforeLeafCount = leafIds(withPreview.paneTree).length;
+    const beforeTabCount = useTabsStore.getState().tabs.length;
+    // After the split the active leaf is the new preview leaf.
+    const previewLeafId = withPreview.activeLeafId;
+
+    // Call openHtmlPreview — hits the replace branch.
+    useTabsStore.getState().openHtmlPreview(tabId, editorLeafId, "/proj/new.html");
+    const updated = useTabsStore.getState().tabs.find((t) => t.id === tabId)!;
+
+    // No new leaves and no new tabs.
+    expect(leafIds(updated.paneTree)).toHaveLength(beforeLeafCount);
+    expect(useTabsStore.getState().tabs).toHaveLength(beforeTabCount);
+    // Preview pane now shows the new file url.
+    expect(findPaneContent(updated.paneTree, previewLeafId)).toEqual({
+      kind: "preview",
+      url: "file:///proj/new.html",
+    });
+    // Active leaf points at the preview pane.
+    expect(updated.activeLeafId).toBe(previewLeafId);
+  });
+});
+
+describe("localPreviewFilePaths", () => {
+  it("includes the decoded local path for a file:// preview pane", () => {
+    const tab: Tab = {
+      id: "t1",
+      spaceId: "s1",
+      title: "a.html",
+      kind: "preview",
+      paneTree: leaf("l1", { kind: "preview", url: "file:///proj/a.html" }),
+      activeLeafId: "l1",
+    };
+    expect(localPreviewFilePaths([tab])).toContain("/proj/a.html");
+  });
+
+  it("excludes web preview urls (http://)", () => {
+    const tab: Tab = {
+      id: "t2",
+      spaceId: "s1",
+      title: "localhost",
+      kind: "preview",
+      paneTree: leaf("l2", { kind: "preview", url: "http://localhost:3000" }),
+      activeLeafId: "l2",
+    };
+    expect(localPreviewFilePaths([tab])).toHaveLength(0);
+  });
+
+  it("contributes nothing for a tab with no preview pane", () => {
+    const tab: Tab = {
+      id: "t3",
+      spaceId: "s1",
+      title: "Term",
+      kind: "terminal",
+      paneTree: leaf("l3", { kind: "terminal" }),
+      activeLeafId: "l3",
+    };
+    expect(localPreviewFilePaths([tab])).toHaveLength(0);
   });
 });
 
