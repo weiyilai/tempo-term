@@ -34,6 +34,7 @@ import { registerSecondaryWindowCleanup } from "@/lib/windowLifecycle";
 import { SshPromptDialog } from "@/modules/ssh/SshPromptDialog";
 import { useForwardStatusListener } from "@/modules/ssh/lib/useForwardStatus";
 import { sftpSessionStore } from "@/modules/ssh/lib/sftpSessionStore";
+import { enforceLogRetention } from "@/modules/logs/lib/sessionLog";
 
 const MIN_SIDEBAR = 180;
 const MAX_SIDEBAR = 640;
@@ -119,6 +120,13 @@ function App() {
   // editing a file) can reload it without closing and reopening the tab.
   useEffect(() => installEditorWatchSync(), []);
 
+  // Prune session logs older than the configured retention window once on
+  // startup so disk usage stays bounded without waiting for the panel to open.
+  useEffect(() => {
+    // Best-effort cleanup; a failure here must never surface as an unhandled rejection.
+    void enforceLogRetention(useSettingsStore.getState().logRetentionDays).catch(() => {});
+  }, []);
+
   // In a secondary window, close this window's PTY sessions before it is
   // destroyed so no background shells leak. No-op in the main window.
   useEffect(() => {
@@ -200,7 +208,7 @@ function App() {
       // field (the terminal is excluded — see isEditableTarget).
       const editable = isEditableTarget(e.target);
 
-      // ⌥1…⌥6 jump straight to a sidebar panel by its position in the icon bar.
+      // ⌥1…⌥7 jump straight to a sidebar panel by its position in the icon bar.
       if (digit !== null && e.altKey && !e.metaKey && !e.ctrlKey && !editable) {
         const view = SIDEBAR_VIEW_ORDER[digit - 1];
         if (view) {
