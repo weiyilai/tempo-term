@@ -404,12 +404,21 @@ pub fn git_commit(repo_path: String, message: String) -> Result<String, String> 
 /// Run a git subcommand against `repo_path` using the system git binary. This
 /// reuses the user's configured credentials/helpers, which matters for push.
 fn run_git(repo_path: &str, args: &[&str]) -> Result<String, String> {
-    let output = std::process::Command::new("git")
-        .arg("-C")
-        .arg(repo_path)
-        .args(args)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let mut command = std::process::Command::new("git");
+    command.arg("-C").arg(repo_path).args(args);
+    // A release build runs without a console (windows_subsystem = "windows" in
+    // main.rs), so without this flag Windows allocates a fresh console for every
+    // spawned git process — each one flashes a window and adds ~100ms. That is
+    // felt as lag every time a commit or file diff is opened (one spawn per
+    // click). CREATE_NO_WINDOW suppresses the console; a no-op on a debug build
+    // that already owns one, which is why `tauri dev` never shows the slowdown.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    let output = command.output().map_err(|e| e.to_string())?;
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).into_owned())
     } else {
