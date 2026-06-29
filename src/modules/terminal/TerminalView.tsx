@@ -871,6 +871,11 @@ export function TerminalView({
     // Without this, a freshly opened pane that auto-runs a CLI (e.g. claude,
     // codex) gets the `cd` typed into that program's prompt instead.
     let last = cwdRef.current ?? "";
+    // Force the explorer to follow this pane the first time it becomes the active
+    // driver (e.g. after switching tab/space), even when its cwd hasn't changed.
+    // Otherwise `dir === last` skips the setRoot below and the file tree stays on
+    // the previously active tab's directory.
+    let firstSync = true;
     const poll = async () => {
       const raw = sessionRef.current;
       const session = raw && isPtySession(raw) ? raw : null;
@@ -884,10 +889,11 @@ export function TerminalView({
         }
         // Remember this pane's own cwd for session restore (store dedupes).
         onCwdChangeRef.current?.(dir);
-        if (dir !== last) {
+        if (dir !== last || firstSync) {
           last = dir;
           useWorkspaceStore.getState().setRoot(dir);
         }
+        firstSync = false;
         // While a pane shows a status, read its foreground process to (a) label
         // which agent is running, so a card can tell Claude from Codex even when
         // two panes share a directory, and (b) act as a crash backstop: if no
