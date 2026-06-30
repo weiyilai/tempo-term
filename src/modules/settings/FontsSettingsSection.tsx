@@ -2,6 +2,7 @@ import { useEffect, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2 } from "lucide-react";
 import { Combobox } from "@/components/Combobox";
+import { ICON_FALLBACK_DISABLED } from "@/modules/fonts/lib/fontChain";
 import {
   MAX_FONT_SIZE,
   MIN_FONT_SIZE,
@@ -11,8 +12,17 @@ import {
 
 export function FontsSettingsSection() {
   const { t } = useTranslation("settings");
-  const { primaryFont, fontSize, report, loading, setPrimaryFont, setFontSize, loadReport } =
-    useFontStore();
+  const {
+    primaryFont,
+    iconFont,
+    fontSize,
+    report,
+    loading,
+    setPrimaryFont,
+    setIconFont,
+    setFontSize,
+    loadReport,
+  } = useFontStore();
 
   useEffect(() => {
     void loadReport();
@@ -22,6 +32,20 @@ export function FontsSettingsSection() {
     () => (report?.fonts ?? []).filter((f) => f.monospace),
     [report],
   );
+
+  const detectedIcon = report?.suggested_icon_fallback;
+  const iconNoneLabel = t("fonts.iconFontNone");
+  const iconAutoLabel = detectedIcon
+    ? t("fonts.iconFontSystemDefault", { name: detectedIcon })
+    : t("fonts.iconFontSystemDefaultEmpty");
+  const iconFontOptions = useMemo(
+    () => [iconAutoLabel, iconNoneLabel, ...(report?.fonts ?? []).map((f) => f.family)],
+    [iconAutoLabel, iconNoneLabel, report],
+  );
+  const iconFontDisplayValue =
+    iconFont === ICON_FALLBACK_DISABLED
+      ? iconNoneLabel
+      : iconFont || iconAutoLabel;
 
   const previewFamily = useFontStore(selectTerminalFontFamily);
 
@@ -68,7 +92,7 @@ export function FontsSettingsSection() {
       </div>
 
       {/* Primary font */}
-      <div>
+      <div className="mb-6">
         <label className="mb-2 block text-sm font-medium text-fg">
           {t("fonts.primary")}
         </label>
@@ -79,6 +103,25 @@ export function FontsSettingsSection() {
             setPrimaryFont(value === t("fonts.systemDefault") ? "" : value)
           }
           ariaLabel={t("fonts.primary")}
+          className="w-72"
+        />
+      </div>
+
+      {/* Icon font (Nerd Font / Powerline glyphs) */}
+      <div>
+        <label className="mb-2 block text-sm font-medium text-fg">
+          {t("fonts.iconFont")}
+        </label>
+        <p className="mb-2 text-xs text-fg-muted">{t("fonts.iconFontHint")}</p>
+        <Combobox
+          value={iconFontDisplayValue}
+          options={iconFontOptions}
+          onChange={(value) => {
+            if (value === iconAutoLabel) setIconFont("");
+            else if (value === iconNoneLabel) setIconFont(ICON_FALLBACK_DISABLED);
+            else setIconFont(value);
+          }}
+          ariaLabel={t("fonts.iconFont")}
           className="w-72"
         />
       </div>
