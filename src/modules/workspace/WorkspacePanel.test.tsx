@@ -10,8 +10,10 @@ import { useWorktreeStore } from "./lib/worktreeStore";
 import { useTitlesStore } from "./lib/titlesStore";
 import { usePrStore } from "./lib/prStore";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useEditorStore } from "@/modules/editor/store/editorStore";
 
 beforeEach(() => {
+  useEditorStore.setState({ buffers: {} });
   useSessionStatusStore.setState({ statuses: {}, agents: {} });
   useWorktreeStore.setState({ infos: {} });
   useTitlesStore.setState({ titles: {} });
@@ -287,5 +289,62 @@ describe("WorkspacePanel", () => {
     const beta = screen.getByRole("button", { name: /beta/ });
     expect(within(beta).getByText("2")).toBeInTheDocument();
     expect(screen.queryByText("alpha")).toBeNull();
+  });
+
+  it("opens a tab context menu on right-click with rename and close items", () => {
+    render(<WorkspacePanel />);
+    const alpha = screen.getByRole("button", { name: /alpha/ });
+    fireEvent.contextMenu(alpha);
+    // The menu items match those in the main TabBar (Rename Tab / Close Tab).
+    expect(screen.getByRole("menuitem", { name: /Rename Tab/i })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: /Close Tab/i })).toBeInTheDocument();
+  });
+
+  it("closes a tab from the sidebar context menu", () => {
+    render(<WorkspacePanel />);
+    const beta = screen.getByRole("button", { name: /beta/ });
+    fireEvent.contextMenu(beta);
+    fireEvent.click(screen.getByRole("menuitem", { name: /Close Tab/i }));
+    expect(useTabsStore.getState().tabs.find((tab) => tab.id === "t2")).toBeUndefined();
+  });
+
+  it("keeps a dirty tab open and confirms before closing via the sidebar menu", () => {
+    // Replace beta with an editor tab pointing at /file.ts so we can mark it dirty.
+    useTabsStore.setState({
+      ...useTabsStore.getState(),
+      tabs: [
+        useTabsStore.getState().tabs[0],
+        {
+          id: "t2",
+          spaceId: "s1",
+          title: "beta",
+          kind: "editor",
+          paneTree: leaf("p2", { kind: "editor", path: "/file.ts" }),
+          activeLeafId: "p2",
+        },
+      ],
+    });
+    useEditorStore.setState({
+      buffers: { "/file.ts": { content: "edited", baseline: "" } },
+    });
+    render(<WorkspacePanel />);
+    const beta = screen.getByRole("button", { name: /beta/ });
+    fireEvent.contextMenu(beta);
+    fireEvent.click(screen.getByRole("menuitem", { name: /Close Tab/i }));
+    // Tab must NOT close immediately — confirm dialog should appear and t2 stays.
+    expect(useTabsStore.getState().tabs.find((tab) => tab.id === "t2")).toBeDefined();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+  });
+
+  it("renames a tab from the sidebar context menu", () => {
+    render(<WorkspacePanel />);
+    const alpha = screen.getByRole("button", { name: /alpha/ });
+    fireEvent.contextMenu(alpha);
+    fireEvent.click(screen.getByRole("menuitem", { name: /Rename Tab/i }));
+    const input = screen.getByDisplayValue("alpha");
+    fireEvent.change(input, { target: { value: "renamed" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(useTabsStore.getState().tabs.find((tab) => tab.id === "t1")?.title).toBe("renamed");
   });
 });
