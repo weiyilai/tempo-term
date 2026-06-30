@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { ghAvailable, prViaApi, prViaGh, type PrInfo } from "./prBridge";
+import { probeStoreUpdate } from "@/lib/perfProbe";
 
 /** Where PR data comes from; mirrors the settings option. */
 export type PrSource = "auto" | "gh" | "token" | "off";
@@ -38,6 +39,7 @@ export const usePrStore = create<PrStoreState>((set) => ({
     }
     try {
       const pr = await fetchPr(cwd, branch, source);
+      probeStoreUpdate("pr");
       set((state) => ({
         prs: { ...state.prs, [cwd]: pr },
         fetchedAt: { ...state.fetchedAt, [cwd]: Date.now() },

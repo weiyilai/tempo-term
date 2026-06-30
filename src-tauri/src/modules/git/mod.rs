@@ -382,8 +382,12 @@ pub fn git_status(repo_path: String) -> Result<GitStatus, String> {
 }
 
 #[tauri::command]
-pub fn git_worktree_info(path: String) -> Result<WorktreeInfo, String> {
-    worktree_info(&path)
+pub async fn git_worktree_info(path: String) -> Result<WorktreeInfo, String> {
+    // Spawns a git subprocess per call; run it off the main thread so a slow repo
+    // (or several at once when the workspace panel mounts) never freezes the UI.
+    tauri::async_runtime::spawn_blocking(move || worktree_info(&path))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

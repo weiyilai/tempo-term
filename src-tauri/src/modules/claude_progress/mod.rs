@@ -373,15 +373,23 @@ pub fn claude_progress_unwatch(state: State<ClaudeProgressState>) {
 /// The title of the newest Claude session for `cwd`, derived from its
 /// transcript. Returns None when the project has no transcript yet.
 #[tauri::command]
-pub fn claude_session_title(app: AppHandle, cwd: String) -> Option<String> {
-    let home = app.path().home_dir().ok()?;
-    let env_value = std::env::var("CLAUDE_CONFIG_DIR").ok();
-    let base = config_base_dir(&home, env_value.as_deref());
-    let dir = base.join("projects").join(mangle_cwd(&cwd));
-    if !dir.is_dir() {
-        return None;
-    }
-    latest_session_title(&dir)
+pub async fn claude_session_title(app: AppHandle, cwd: String) -> Option<String> {
+    // Reading and JSON-parsing the whole transcript scales with session length;
+    // run it on a blocking thread so a long session never freezes the UI. This is
+    // the main-thread work that grew with transcript size (see fonts_report).
+    tauri::async_runtime::spawn_blocking(move || {
+        let home = app.path().home_dir().ok()?;
+        let env_value = std::env::var("CLAUDE_CONFIG_DIR").ok();
+        let base = config_base_dir(&home, env_value.as_deref());
+        let dir = base.join("projects").join(mangle_cwd(&cwd));
+        if !dir.is_dir() {
+            return None;
+        }
+        latest_session_title(&dir)
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 #[cfg(test)]

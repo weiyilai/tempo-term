@@ -38,6 +38,7 @@ import type { WorktreeInfo } from "./lib/worktreeBridge";
 import type { PrInfo } from "./lib/prBridge";
 import { progressKey } from "@/modules/claude-progress/lib/progressStore";
 import { agentLabel } from "./lib/agentLabel";
+import { probeCardRender } from "@/lib/perfProbe";
 
 function tabIcon(kind: TabKind): LucideIcon {
   switch (kind) {
@@ -221,6 +222,7 @@ function SessionRow({
 }
 
 function TabCard({ tab, index }: { tab: Tab; index: number }) {
+  probeCardRender();
   const { t } = useTranslation();
   const activeId = useTabsStore((s) => s.activeId);
   const setActive = useTabsStore((s) => s.setActive);

@@ -300,13 +300,20 @@ fn route_event(app: &AppHandle, base: &Path, route: &Arc<Mutex<RouteState>>, eve
 /// The title of the newest Codex session for `cwd`, read from its rollout.
 /// Returns None when no recent rollout exists for that directory.
 #[tauri::command]
-pub fn codex_session_title(app: AppHandle, cwd: String) -> Option<String> {
-    let home = app.path().home_dir().ok()?;
-    let base = codex_sessions_base(&home);
-    let candidates = scan_recent_rollouts(&base, &recent_days());
-    let path = select_newest_for_cwd(&candidates, &cwd)?;
-    let file = File::open(path).ok()?;
-    extract_codex_title(BufReader::new(file))
+pub async fn codex_session_title(app: AppHandle, cwd: String) -> Option<String> {
+    // Scanning rollouts and parsing the transcript scales with session length;
+    // run it on a blocking thread so a long session never freezes the UI.
+    tauri::async_runtime::spawn_blocking(move || {
+        let home = app.path().home_dir().ok()?;
+        let base = codex_sessions_base(&home);
+        let candidates = scan_recent_rollouts(&base, &recent_days());
+        let path = select_newest_for_cwd(&candidates, &cwd)?;
+        let file = File::open(path).ok()?;
+        extract_codex_title(BufReader::new(file))
+    })
+    .await
+    .ok()
+    .flatten()
 }
 
 #[cfg(test)]

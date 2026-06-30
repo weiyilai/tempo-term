@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { SessionStatus } from "./sessionStatus";
 import type { AgentKind } from "./codexNormalize";
+import { probeStoreUpdate } from "@/lib/perfProbe";
 
 interface SessionStatusState {
   /** Live agent status per terminal leaf id; absence means no badge. */
@@ -20,13 +21,21 @@ export const useSessionStatusStore = create<SessionStatusState>((set) => ({
   statuses: {},
   agents: {},
   setStatus: (leafId, status) =>
-    set((s) =>
-      s.statuses[leafId] === status ? s : { statuses: { ...s.statuses, [leafId]: status } },
-    ),
+    set((s) => {
+      if (s.statuses[leafId] === status) {
+        return s;
+      }
+      probeStoreUpdate("status");
+      return { statuses: { ...s.statuses, [leafId]: status } };
+    }),
   setAgent: (leafId, agent) =>
-    set((s) =>
-      s.agents[leafId] === agent ? s : { agents: { ...s.agents, [leafId]: agent } },
-    ),
+    set((s) => {
+      if (s.agents[leafId] === agent) {
+        return s;
+      }
+      probeStoreUpdate("agent");
+      return { agents: { ...s.agents, [leafId]: agent } };
+    }),
   clear: (leafId) =>
     set((s) => {
       const hasStatus = leafId in s.statuses;

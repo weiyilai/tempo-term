@@ -9,6 +9,7 @@ import { ConnectionsPanel } from "@/modules/ssh/ConnectionsPanel";
 import { LogsView } from "@/modules/logs/LogsView";
 import { Tooltip } from "@/components/Tooltip";
 import { useUiStore, type SidebarView } from "@/stores/uiStore";
+import { probeStart } from "@/lib/perfProbe";
 
 interface SidebarTab {
   id: SidebarView;
@@ -49,7 +50,10 @@ export function Sidebar() {
                 type="button"
                 aria-label={t(labelKey)}
                 aria-pressed={active}
-                onClick={() => selectSidebar(id)}
+                onClick={() => {
+                  if (id === "workspaces") probeStart();
+                  selectSidebar(id);
+                }}
                 className={`flex h-7 w-8 items-center justify-center border-b-2 transition-colors ${
                   active
                     ? "border-accent text-fg"
@@ -64,7 +68,17 @@ export function Sidebar() {
       </div>
 
       <div className="min-h-0 flex-1 overflow-hidden">
-        {sidebarView === "workspaces" && <WorkspacePanel />}
+        {/*
+         * WorkspacePanel stays mounted and is just hidden when another sidebar
+         * view is active. Unmounting it drops the cached worktree / title / PR
+         * fetches and re-fires N IPC calls per cwd on every switch back, which
+         * is the main contributor to the multi-second sidebar-switch jank. The
+         * other panels still mount conditionally because their state cleanup
+         * on unmount is cheap and their cards do not chain IPC storms.
+         */}
+        <div className="h-full w-full" hidden={sidebarView !== "workspaces"}>
+          <WorkspacePanel />
+        </div>
         {sidebarView === "explorer" && <ExplorerView />}
         {sidebarView === "sourceControl" && <SourceControlView />}
         {sidebarView === "notes" && <NotesSidebar />}

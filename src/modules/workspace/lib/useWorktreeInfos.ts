@@ -17,8 +17,12 @@ export function useWorktreeInfos(cwds: string[]): void {
     if (list.length === 0) {
       return;
     }
+    // Mount path: store skips entries within its stale window so a sidebar
+    // switch back to Workspaces does not re-fire N IPCs.
     void refresh(list);
-    const onFocus = () => void refresh(list);
+    // Focus path: force a refetch since branches/worktrees can change while
+    // the app is in the background.
+    const onFocus = () => void refresh(list, true);
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [key, refresh]);
