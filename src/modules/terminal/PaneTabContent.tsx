@@ -40,6 +40,8 @@ import { insertLinkIntoNote } from "@/modules/notes/lib/noteBus";
 import { deleteTerminalHistory } from "./lib/terminalHistory";
 import { useTabsStore, type Tab } from "@/stores/tabsStore";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
+import { useUiStore, selectAnyOverlayOpen } from "@/stores/uiStore";
+import { shouldShowPreview } from "@/modules/preview/lib/previewWebview";
 import { useRemoteExplorerRoot } from "@/modules/ssh/lib/useRemoteExplorerRoot";
 
 const MIN_FRACTION = 0.1;
@@ -60,6 +62,7 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
   const closePane = useTabsStore((s) => s.closePane);
   const openHtmlPreview = useTabsStore((s) => s.openHtmlPreview);
   const isActiveTab = useTabsStore((s) => s.activeId === tab.id);
+  const anyOverlay = useUiStore(selectAnyOverlayOpen);
   const paneAreaRef = useRef<HTMLDivElement>(null);
   // Which splitter is currently being dragged, so its hairline keeps its
   // highlight color even when the pointer slips off the thin hit area mid-drag.
@@ -263,7 +266,15 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
                     leafId={pane.id}
                   />
                 ) : pane.content.kind === "preview" ? (
-                  <PreviewTabContent url={pane.content.url} />
+                  <PreviewTabContent
+                    url={pane.content.url}
+                    leafId={pane.id}
+                    visible={shouldShowPreview({
+                      isActiveTab,
+                      dragging: draggingSplitterId !== null,
+                      anyOverlay,
+                    })}
+                  />
                 ) : pane.content.kind === "git-graph" ? (
                   <GitGraphTabContent />
                 ) : pane.content.kind === "launcher" ? (
