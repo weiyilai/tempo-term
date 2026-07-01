@@ -173,13 +173,31 @@ fn find_gh() -> Option<PathBuf> {
     None
 }
 
+/// Build a `Command` for the `gh` binary with the console suppressed on Windows.
+/// A release build has no console of its own (windows_subsystem = "windows" in
+/// main.rs), so each un-flagged spawn allocates a fresh console that flashes a
+/// window — and PR lookups poll on a timer, so those flashes are constant. See
+/// git::run_git for the same reasoning; CREATE_NO_WINDOW is a no-op on a debug
+/// build that already owns a console.
+fn gh_command(gh: &std::path::Path) -> Command {
+    #[cfg_attr(not(windows), allow(unused_mut))]
+    let mut command = Command::new(gh);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
 /// Whether the `gh` CLI is available.
 #[tauri::command]
 pub fn gh_available() -> bool {
     let Some(gh) = find_gh() else {
         return false;
     };
-    Command::new(gh)
+    gh_command(&gh)
         .arg("--version")
         .output()
         .map(|o| o.status.success())
@@ -206,7 +224,7 @@ pub fn pr_via_gh(cwd: String, branch: Option<String>) -> Result<Option<PrInfo>, 
     let Some(gh) = find_gh() else {
         return Ok(None);
     };
-    let output = match Command::new(gh).args(&args).current_dir(&cwd).output() {
+    let output = match gh_command(&gh).args(&args).current_dir(&cwd).output() {
         Ok(output) => output,
         Err(_) => return Ok(None),
     };
