@@ -286,6 +286,7 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
                 ) : (
                   <TerminalView
                     active={active}
+                    isActiveTab={isActiveTab}
                     cwdTracking={
                       active &&
                       isActiveTab &&
