@@ -123,6 +123,11 @@ export function useNativePreviewWebview({ url, leafId, visible, onNavigate, onTi
   // The last src we asked the webview to load, so a url-prop change only
   // navigates when it is genuinely different (and never re-loads the initial).
   const loadedSrcRef = useRef<string | null>(null);
+  // The latest url prop, readable inside the creation effect's async closure
+  // (which otherwise captures a stale url). Lets us catch up if the url changes
+  // while the webview is still being built — see the creation effect below.
+  const latestUrlRef = useRef(url);
+  latestUrlRef.current = url;
   const uiZoom = useSettingsStore((s) => s.uiZoom);
   const zoomRef = useRef(uiZoom);
   const onNavigateRef = useRef(onNavigate);
@@ -212,6 +217,15 @@ export function useNativePreviewWebview({ url, leafId, visible, onNavigate, onTi
       shownRef.current = false;
       lastRectRef.current = null;
       sync();
+
+      // If the url prop changed while the webview was being built, the navigate
+      // effect ran too early (webviewRef was still null) and bailed. Reconcile
+      // now so that in-flight change isn't lost.
+      const latestSrc = resolvePreviewSrc(latestUrlRef.current);
+      if (latestSrc !== loadedSrcRef.current) {
+        loadedSrcRef.current = latestSrc;
+        void invoke("preview_navigate", { label, url: latestSrc }).catch(() => {});
+      }
     })();
 
     return () => {
