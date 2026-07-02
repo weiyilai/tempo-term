@@ -1,13 +1,19 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 interface TooltipProps {
-  label: string;
+  /** Falsy label = render children only, never show a tooltip. */
+  label: string | null | undefined | false;
   side?: "bottom" | "top" | "right";
+  /** Delay before showing, ms. A uniform default keeps busy rows (tabs, tree) quiet. */
+  delayMs?: number;
+  /** Extra classes for the wrapper span (layout compat: flex-1, min-w-0, w-full…). */
+  className?: string;
   children: ReactNode;
 }
 
 const MARGIN = 6;
+const DEFAULT_DELAY_MS = 300;
 
 /**
  * A hover tooltip rendered through a portal with fixed positioning, clamped to
@@ -15,11 +21,50 @@ const MARGIN = 6;
  * `title` tooltips, and a CSS one would be clipped by the sidebar's overflow —
  * a portal plus clamping sidesteps both.
  */
-export function Tooltip({ label, side = "bottom", children }: TooltipProps) {
+export function Tooltip({
+  label,
+  side = "bottom",
+  delayMs = DEFAULT_DELAY_MS,
+  className,
+  children,
+}: TooltipProps) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const tipRef = useRef<HTMLSpanElement>(null);
+  const timerRef = useRef<number | null>(null);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+
+  const cancel = useCallback(() => {
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setAnchor(null);
+    setPos(null);
+  }, []);
+
+  useEffect(() => cancel, [cancel]);
+
+  // A label that turns falsy while shown (e.g. a hint tied to a disabled
+  // state that just re-enabled) hides the tooltip.
+  useEffect(() => {
+    if (!label) {
+      cancel();
+    }
+  }, [label, cancel]);
+
+  function arm() {
+    if (!label || timerRef.current !== null) {
+      return;
+    }
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = null;
+      // Absolutely-positioned children (git graph nodes) leave the wrapper
+      // zero-sized, so anchor on the child element when there is one.
+      const el = anchorRef.current?.firstElementChild ?? anchorRef.current;
+      setAnchor(el?.getBoundingClientRect() ?? null);
+    }, delayMs);
+  }
 
   // Measure the rendered tooltip, then place it and clamp to the viewport.
   useLayoutEffect(() => {
@@ -49,15 +94,14 @@ export function Tooltip({ label, side = "bottom", children }: TooltipProps) {
   return (
     <span
       ref={anchorRef}
-      onMouseEnter={() => setAnchor(anchorRef.current?.getBoundingClientRect() ?? null)}
-      onMouseLeave={() => {
-        setAnchor(null);
-        setPos(null);
-      }}
-      className="inline-flex"
+      onMouseEnter={arm}
+      onMouseLeave={cancel}
+      onMouseDownCapture={cancel}
+      className={className ? `inline-flex ${className}` : "inline-flex"}
     >
       {children}
-      {anchor &&
+      {label &&
+        anchor &&
         createPortal(
           <span
             ref={tipRef}
