@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { Combobox } from "@/components/Combobox";
+import { Tooltip } from "@/components/Tooltip";
 import type { Branch, CommitOrder } from "./types";
 
 // Below this measured toolbar width the layout switches to compact: the action
@@ -204,41 +205,46 @@ export function GitGraphToolbar({
                 {labels.matches.replace("{{count}}", String(matchCount))}
               </span>
             )}
-            <button
-              type="button"
-              title={labels.search}
-              onClick={() => {
-                onSearchChange("");
-                setSearchOpen(false);
-              }}
-              className="rounded p-1 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            <Tooltip label={labels.search}>
+              <button
+                type="button"
+                aria-label={labels.search}
+                onClick={() => {
+                  onSearchChange("");
+                  setSearchOpen(false);
+                }}
+                className="rounded p-1 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </Tooltip>
           </div>
         ) : (
-          <button
-            type="button"
-            title={labels.search}
-            onClick={() => setSearchOpen(true)}
-            className="rounded p-1.5 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
-          >
-            <Search className="h-4 w-4" />
-          </button>
+          <Tooltip label={labels.search}>
+            <button
+              type="button"
+              aria-label={labels.search}
+              onClick={() => setSearchOpen(true)}
+              className="rounded p-1.5 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
+            >
+              <Search className="h-4 w-4" />
+            </button>
+          </Tooltip>
         )}
 
         {isCompact ? (
           <div className="relative">
-            <button
-              type="button"
-              title={labels.more}
-              aria-label={labels.more}
-              aria-expanded={overflowOpen}
-              onClick={() => setOverflowOpen((v) => !v)}
-              className="rounded p-1.5 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
+            <Tooltip label={labels.more}>
+              <button
+                type="button"
+                aria-label={labels.more}
+                aria-expanded={overflowOpen}
+                onClick={() => setOverflowOpen((v) => !v)}
+                className="rounded p-1.5 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </Tooltip>
             {overflowOpen && (
               <>
                 <div
@@ -293,14 +299,16 @@ export function GitGraphToolbar({
         ) : (
           <>
             <div className="relative">
-              <button
-                type="button"
-                title={labels.displayOptions}
-                onClick={() => setOptionsOpen((v) => !v)}
-                className="rounded p-1.5 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
-              >
-                <Settings2 className="h-4 w-4" />
-              </button>
+              <Tooltip label={labels.displayOptions}>
+                <button
+                  type="button"
+                  aria-label={labels.displayOptions}
+                  onClick={() => setOptionsOpen((v) => !v)}
+                  className="rounded p-1.5 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
+                >
+                  <Settings2 className="h-4 w-4" />
+                </button>
+              </Tooltip>
               {optionsOpen && (
                 <>
                   <div
@@ -318,25 +326,29 @@ export function GitGraphToolbar({
               )}
             </div>
 
-            <button
-              type="button"
-              title={labels.refresh}
-              onClick={onRefresh}
-              disabled={refreshing}
-              className="rounded p-1.5 text-fg-subtle hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            </button>
+            <Tooltip label={labels.refresh}>
+              <button
+                type="button"
+                aria-label={labels.refresh}
+                onClick={onRefresh}
+                disabled={refreshing}
+                className="rounded p-1.5 text-fg-subtle hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+              >
+                <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              </button>
+            </Tooltip>
 
-            <button
-              type="button"
-              title={fetching ? labels.fetching : labels.fetch}
-              onClick={onFetch}
-              disabled={fetching}
-              className="rounded p-1.5 text-fg-subtle hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
-            >
-              <DownloadCloud className={`h-4 w-4 ${fetching ? "animate-pulse" : ""}`} />
-            </button>
+            <Tooltip label={fetching ? labels.fetching : labels.fetch}>
+              <button
+                type="button"
+                aria-label={fetching ? labels.fetching : labels.fetch}
+                onClick={onFetch}
+                disabled={fetching}
+                className="rounded p-1.5 text-fg-subtle hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+              >
+                <DownloadCloud className={`h-4 w-4 ${fetching ? "animate-pulse" : ""}`} />
+              </button>
+            </Tooltip>
 
             <span className="ml-1 whitespace-nowrap font-mono text-[11px] text-fg-subtle">
               {labels.head}: {currentBranch}

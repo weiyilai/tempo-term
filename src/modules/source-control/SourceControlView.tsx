@@ -25,6 +25,7 @@ import {
   type FileStatus,
   type GitStatus,
 } from "./lib/gitBridge";
+import { Tooltip } from "@/components/Tooltip";
 import { groupByFolder } from "./lib/groupByFolder";
 import { generateCommitMessage } from "./lib/aiCommit";
 import { withMinDuration } from "@/lib/withMinDuration";
@@ -67,18 +68,21 @@ function StatusRow({
       >
         {file.status}
       </span>
-      <span className="flex-1 truncate text-fg-muted" title={file.path}>
-        {displayPath ?? file.path}
-      </span>
-      <button
-        type="button"
-        aria-label={actionLabel}
-        title={actionLabel}
-        onClick={() => onAction(file.path)}
-        className="rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
-      >
-        <ActionIcon size={14} />
-      </button>
+      <Tooltip label={file.path} className="min-w-0 flex-1">
+        <span className="min-w-0 flex-1 truncate text-fg-muted">
+          {displayPath ?? file.path}
+        </span>
+      </Tooltip>
+      <Tooltip label={actionLabel}>
+        <button
+          type="button"
+          aria-label={actionLabel}
+          onClick={() => onAction(file.path)}
+          className="rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
+        >
+          <ActionIcon size={14} />
+        </button>
+      </Tooltip>
     </li>
   );
 }
@@ -142,18 +146,19 @@ function FileList({
           <li key={group.folder || "(root)"}>
             <div className="group flex items-center gap-2 px-3 py-1 text-sm hover:bg-bg-elevated/60">
               <Folder size={13} className="shrink-0 text-fg-subtle" />
-              <span className="flex-1 truncate text-fg-muted" title={display}>
-                {display}
-              </span>
-              <button
-                type="button"
-                aria-label={`${folderActionLabel}: ${display}`}
-                title={`${folderActionLabel}: ${display}`}
-                onClick={() => onFolderAction(group.files.map((f) => f.path))}
-                className="rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
-              >
-                <FolderActionIcon size={14} />
-              </button>
+              <Tooltip label={display} className="min-w-0 flex-1">
+                <span className="min-w-0 flex-1 truncate text-fg-muted">{display}</span>
+              </Tooltip>
+              <Tooltip label={`${folderActionLabel}: ${display}`}>
+                <button
+                  type="button"
+                  aria-label={`${folderActionLabel}: ${display}`}
+                  onClick={() => onFolderAction(group.files.map((f) => f.path))}
+                  className="rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
+                >
+                  <FolderActionIcon size={14} />
+                </button>
+              </Tooltip>
             </div>
             <ul className="pl-3">
               {group.files.map((file) => (
@@ -284,25 +289,27 @@ export function SourceControlView() {
           {t("title")}
         </span>
         <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            aria-label={viewMode === "flat" ? t("viewFolder") : t("viewFlat")}
-            title={viewMode === "flat" ? t("viewFolder") : t("viewFlat")}
-            onClick={() => setViewMode((m) => (m === "flat" ? "folder" : "flat"))}
-            className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-          >
-            {viewMode === "flat" ? <FolderTree size={14} /> : <List size={14} />}
-          </button>
-          <button
-            type="button"
-            aria-label={t("refresh")}
-            title={t("refresh")}
-            onClick={() => void refresh()}
-            disabled={refreshing}
-            className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-          </button>
+          <Tooltip label={viewMode === "flat" ? t("viewFolder") : t("viewFlat")}>
+            <button
+              type="button"
+              aria-label={viewMode === "flat" ? t("viewFolder") : t("viewFlat")}
+              onClick={() => setViewMode((m) => (m === "flat" ? "folder" : "flat"))}
+              className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+            >
+              {viewMode === "flat" ? <FolderTree size={14} /> : <List size={14} />}
+            </button>
+          </Tooltip>
+          <Tooltip label={t("refresh")}>
+            <button
+              type="button"
+              aria-label={t("refresh")}
+              onClick={() => void refresh()}
+              disabled={refreshing}
+              className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg disabled:opacity-50"
+            >
+              <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -322,20 +329,21 @@ export function SourceControlView() {
             rows={2}
             className="w-full resize-none rounded-md border border-border bg-bg px-2 py-1.5 pr-9 text-sm text-fg outline-none focus:border-accent"
           />
-          <button
-            type="button"
-            disabled={!hasStaged || generating}
-            onClick={() => void aiGenerate()}
-            aria-label={t("aiGenerate")}
-            title={t("aiGenerate")}
-            className="absolute right-1.5 top-1.5 rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {generating ? (
-              <Loader2 size={15} className="animate-spin" />
-            ) : (
-              <Sparkles size={15} />
-            )}
-          </button>
+          <Tooltip label={t("aiGenerate")} className="absolute right-1.5 top-1.5">
+            <button
+              type="button"
+              disabled={!hasStaged || generating}
+              onClick={() => void aiGenerate()}
+              aria-label={t("aiGenerate")}
+              className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {generating ? (
+                <Loader2 size={15} className="animate-spin" />
+              ) : (
+                <Sparkles size={15} />
+              )}
+            </button>
+          </Tooltip>
         </div>
         <div className="mt-2 flex gap-2">
           <button
@@ -355,7 +363,6 @@ export function SourceControlView() {
             type="button"
             disabled={pushing}
             onClick={() => void doPush()}
-            title={t("push")}
             className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-fg-muted transition-colors hover:border-border-strong hover:text-fg disabled:opacity-40"
           >
             {pushing ? (

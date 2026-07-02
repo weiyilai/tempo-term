@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, KeyRound } from "lucide-react";
+import { Tooltip } from "@/components/Tooltip";
 import {
   useSettingsStore,
   type WorkspaceCardBlocks,
@@ -176,21 +177,25 @@ export function WorkspaceSettingsSection() {
         />
         {t("workspace.statusTrackingLabel")}
       </label>
-      <label
-        className={`mb-6 flex items-center gap-2 text-sm ${
-          statusTracking ? "text-fg" : "text-fg-subtle"
-        }`}
-        title={statusTracking ? undefined : t("workspace.notificationsRequiresTracking")}
+      <Tooltip
+        label={statusTracking ? undefined : t("workspace.notificationsRequiresTracking")}
+        className="mb-6"
       >
-        <input
-          type="checkbox"
-          checked={notifications}
-          disabled={!statusTracking}
-          onChange={(e) => void toggleNotifications(e.target.checked)}
-          className="h-4 w-4 accent-accent disabled:opacity-50"
-        />
-        {t("workspace.notificationsLabel")}
-      </label>
+        <label
+          className={`flex items-center gap-2 text-sm ${
+            statusTracking ? "text-fg" : "text-fg-subtle"
+          }`}
+        >
+          <input
+            type="checkbox"
+            checked={notifications}
+            disabled={!statusTracking}
+            onChange={(e) => void toggleNotifications(e.target.checked)}
+            className="h-4 w-4 accent-accent disabled:opacity-50"
+          />
+          {t("workspace.notificationsLabel")}
+        </label>
+      </Tooltip>
 
       <label className="mb-1 block text-sm font-medium text-fg">
         {t("workspace.launcherFlagsTitle")}

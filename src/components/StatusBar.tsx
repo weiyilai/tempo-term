@@ -58,25 +58,27 @@ export function StatusBar() {
       <div className="ml-auto flex items-center gap-1">
         <PortsIndicator />
         {showIndicator && (
+          <Tooltip label={t("statusBar.updateAvailable")} side="top">
+            <button
+              type="button"
+              aria-label={t("statusBar.updateAvailable")}
+              onClick={openModal}
+              className="flex h-5 items-center gap-1 rounded px-1.5 text-accent transition-colors hover:bg-bg-elevated"
+            >
+              <ArrowUpCircle size={13} strokeWidth={2} />
+            </button>
+          </Tooltip>
+        )}
+        <Tooltip label={t("nav.settings")} side="top">
           <button
             type="button"
-            title={t("statusBar.updateAvailable")}
-            aria-label={t("statusBar.updateAvailable")}
-            onClick={openModal}
-            className="flex h-5 items-center gap-1 rounded px-1.5 text-accent transition-colors hover:bg-bg-elevated"
+            aria-label={t("nav.settings")}
+            onClick={() => setSettingsOpen(true)}
+            className="flex h-5 w-6 items-center justify-center rounded text-fg-subtle transition-colors hover:text-fg"
           >
-            <ArrowUpCircle size={13} strokeWidth={2} />
+            <Settings size={14} strokeWidth={1.75} />
           </button>
-        )}
-        <button
-          type="button"
-          title={t("nav.settings")}
-          aria-label={t("nav.settings")}
-          onClick={() => setSettingsOpen(true)}
-          className="flex h-5 w-6 items-center justify-center rounded text-fg-subtle transition-colors hover:text-fg"
-        >
-          <Settings size={14} strokeWidth={1.75} />
-        </button>
+        </Tooltip>
       </div>
     </footer>
   );

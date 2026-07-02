@@ -47,9 +47,9 @@ export function EditorToolbar({
   return (
     /* pr-8 leaves room for the pane's close button (absolute, top-right). */
     <div className="flex h-7 shrink-0 items-center justify-between gap-2 border-b border-border pl-2 pr-8">
-      <span className="min-w-0 truncate text-xs text-fg-muted" title={path}>
-        {basename(path)}
-      </span>
+      <Tooltip label={path} className="min-w-0">
+        <span className="min-w-0 truncate text-xs text-fg-muted">{basename(path)}</span>
+      </Tooltip>
       <div className="flex shrink-0 items-center gap-0.5">
         <Tooltip label={t("refresh")}>
           <button

@@ -26,6 +26,7 @@ import { createSlashCommand } from "./slashCommand";
 import { registerNoteInserter, unregisterNoteInserter } from "./lib/noteBus";
 import { bashCommandHighlight } from "./lib/bashCommandHighlight";
 import { Combobox } from "@/components/Combobox";
+import { Tooltip } from "@/components/Tooltip";
 
 const lowlight = createLowlight(common);
 // Override the stock bash grammar so leading command names (ssh, git, custom
@@ -81,30 +82,32 @@ function CodeBlockView({ node, updateAttributes }: NodeViewProps) {
         />
         <div className="flex items-center gap-2">
           <span className="select-none text-[11px] text-fg-subtle">{t("exitHint")}</span>
-          <button
-            type="button"
-            title={t("copy")}
-            aria-label={t("copy")}
-            onClick={() => {
-              void navigator.clipboard.writeText(node.textContent).then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1200);
-              });
-            }}
-            className="rounded p-1 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
-          >
-            {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
-          </button>
-          {runnable && (
+          <Tooltip label={t("copy")}>
             <button
               type="button"
-              title={t("run")}
-              aria-label={t("run")}
-              onClick={() => runCommandInTerminal(node.textContent)}
-              className="rounded p-1 text-fg-subtle hover:bg-bg-elevated hover:text-accent"
+              aria-label={t("copy")}
+              onClick={() => {
+                void navigator.clipboard.writeText(node.textContent).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1200);
+                });
+              }}
+              className="rounded p-1 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
             >
-              <SquareTerminal size={14} />
+              {copied ? <Check size={14} className="text-success" /> : <Copy size={14} />}
             </button>
+          </Tooltip>
+          {runnable && (
+            <Tooltip label={t("run")}>
+              <button
+                type="button"
+                aria-label={t("run")}
+                onClick={() => runCommandInTerminal(node.textContent)}
+                className="rounded p-1 text-fg-subtle hover:bg-bg-elevated hover:text-accent"
+              >
+                <SquareTerminal size={14} />
+              </button>
+            </Tooltip>
           )}
         </div>
       </div>

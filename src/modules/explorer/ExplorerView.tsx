@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FolderOpen, Search } from "lucide-react";
+import { CopyMinus, FolderOpen, Search } from "lucide-react";
 import { FileTree } from "./FileTree";
 import { FileFinder } from "./FileFinder";
+import { Tooltip } from "@/components/Tooltip";
 import { fsReadDir, type DirEntry } from "./lib/fsBridge";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useUiStore } from "@/stores/uiStore";
@@ -17,6 +18,7 @@ export function ExplorerView() {
   const setFinderOpen = useUiStore((s) => s.setFileFinderOpen);
   const [entries, setEntries] = useState<DirEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [collapseSignal, setCollapseSignal] = useState(0);
 
   // A remote (SFTP) root hides local-only controls and shows the remote path
   // rather than the raw ssh:// uri.
@@ -55,36 +57,51 @@ export function ExplorerView() {
         <span className="truncate text-xs font-semibold uppercase tracking-wide text-fg-subtle">
           {t("title")}
         </span>
-        {!remote && (
-          <div className="flex items-center gap-0.5">
-            <button
-              type="button"
-              aria-label={t("openFolder")}
-              title={t("openFolder")}
-              onClick={() => void openFolder()}
-              className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-            >
-              <FolderOpen size={15} />
-            </button>
-            <button
-              type="button"
-              aria-label={t("findFiles")}
-              title={t("findFiles")}
-              onClick={() => setFinderOpen(true)}
-              className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-            >
-              <Search size={15} />
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-0.5">
+          {!remote && (
+            <>
+              <Tooltip label={t("openFolder")}>
+                <button
+                  type="button"
+                  aria-label={t("openFolder")}
+                  onClick={() => void openFolder()}
+                  className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+                >
+                  <FolderOpen size={15} />
+                </button>
+              </Tooltip>
+              <Tooltip label={t("findFiles")}>
+                <button
+                  type="button"
+                  aria-label={t("findFiles")}
+                  onClick={() => setFinderOpen(true)}
+                  className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+                >
+                  <Search size={15} />
+                </button>
+              </Tooltip>
+            </>
+          )}
+          {rootPath && (
+            <Tooltip label={t("collapseAll")}>
+              <button
+                type="button"
+                aria-label={t("collapseAll")}
+                onClick={() => setCollapseSignal((v) => v + 1)}
+                className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+              >
+                <CopyMinus size={15} />
+              </button>
+            </Tooltip>
+          )}
+        </div>
       </div>
 
       {rootPath && (
-        <div
-          className="truncate border-b border-border px-3 py-1 text-[11px] text-fg-subtle"
-          title={displayRoot ?? rootPath}
-        >
-          {displayRoot}
+        <div className="border-b border-border px-3 py-1">
+          <Tooltip label={displayRoot ?? rootPath} className="max-w-full">
+            <span className="block truncate text-[11px] text-fg-subtle">{displayRoot}</span>
+          </Tooltip>
         </div>
       )}
 
@@ -94,7 +111,7 @@ export function ExplorerView() {
         ) : entries.length === 0 ? (
           <p className="px-3 py-2 text-xs text-fg-subtle">{t("empty")}</p>
         ) : (
-          <FileTree entries={entries} onReloadRoot={loadEntries} />
+          <FileTree entries={entries} onReloadRoot={loadEntries} collapseSignal={collapseSignal} />
         )}
       </div>
 

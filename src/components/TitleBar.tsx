@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Minus, Square, X } from "lucide-react";
+import { Tooltip } from "@/components/Tooltip";
 import { IS_WINDOWS } from "@/lib/platform";
 import {
   closeWindow,
@@ -65,33 +66,36 @@ export function TitleBar() {
     <div className="flex h-8 shrink-0 items-center border-b border-border bg-bg-inset">
       <div data-tauri-drag-region className="h-full flex-1" />
       <div className="flex h-full shrink-0 items-center">
-        <button
-          type="button"
-          aria-label={t("titleBar.minimize")}
-          title={t("titleBar.minimize")}
-          onClick={() => void minimizeWindow()}
-          className="flex h-8 w-11 items-center justify-center text-fg-subtle transition-colors hover:bg-bg-elevated hover:text-fg"
-        >
-          <Minus size={15} />
-        </button>
-        <button
-          type="button"
-          aria-label={isMaximized ? t("titleBar.restore") : t("titleBar.maximize")}
-          title={isMaximized ? t("titleBar.restore") : t("titleBar.maximize")}
-          onClick={() => void toggleMaximizeWindow()}
-          className="flex h-8 w-11 items-center justify-center text-fg-subtle transition-colors hover:bg-bg-elevated hover:text-fg"
-        >
-          {isMaximized ? <RestoreIcon size={11} /> : <Square size={12} />}
-        </button>
-        <button
-          type="button"
-          aria-label={t("titleBar.close")}
-          title={t("titleBar.close")}
-          onClick={() => void closeWindow()}
-          className="flex h-8 w-11 items-center justify-center text-fg-subtle transition-colors hover:bg-danger hover:text-white"
-        >
-          <X size={16} />
-        </button>
+        <Tooltip label={t("titleBar.minimize")} side="bottom">
+          <button
+            type="button"
+            aria-label={t("titleBar.minimize")}
+            onClick={() => void minimizeWindow()}
+            className="flex h-8 w-11 items-center justify-center text-fg-subtle transition-colors hover:bg-bg-elevated hover:text-fg"
+          >
+            <Minus size={15} />
+          </button>
+        </Tooltip>
+        <Tooltip label={isMaximized ? t("titleBar.restore") : t("titleBar.maximize")} side="bottom">
+          <button
+            type="button"
+            aria-label={isMaximized ? t("titleBar.restore") : t("titleBar.maximize")}
+            onClick={() => void toggleMaximizeWindow()}
+            className="flex h-8 w-11 items-center justify-center text-fg-subtle transition-colors hover:bg-bg-elevated hover:text-fg"
+          >
+            {isMaximized ? <RestoreIcon size={11} /> : <Square size={12} />}
+          </button>
+        </Tooltip>
+        <Tooltip label={t("titleBar.close")} side="bottom">
+          <button
+            type="button"
+            aria-label={t("titleBar.close")}
+            onClick={() => void closeWindow()}
+            className="flex h-8 w-11 items-center justify-center text-fg-subtle transition-colors hover:bg-danger hover:text-white"
+          >
+            <X size={16} />
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

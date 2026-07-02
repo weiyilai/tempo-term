@@ -7,6 +7,7 @@ import { useTabsStore } from "@/stores/tabsStore";
 import { ConnectionForm } from "@/modules/ssh/ConnectionForm";
 import { ContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import { InfoDialog } from "@/components/InfoDialog";
+import { Tooltip } from "@/components/Tooltip";
 import { useLiveSessionsStore } from "@/modules/ssh/lib/liveSessionsStore";
 import { useForwardStatusStore } from "@/modules/ssh/lib/forwardStatusStore";
 import { startForward, stopForward } from "@/modules/ssh/lib/ssh-bridge";
@@ -29,10 +30,9 @@ function StatusDot({ color, title }: StatusDotProps) {
         ? "bg-red-500"
         : "bg-fg-subtle";
   return (
-    <span
-      title={title}
-      className={`inline-block h-2 w-2 shrink-0 rounded-full ${colorClass}`}
-    />
+    <Tooltip label={title} className="shrink-0">
+      <span className={`inline-block h-2 w-2 rounded-full ${colorClass}`} />
+    </Tooltip>
   );
 }
 
@@ -76,15 +76,19 @@ function ForwardRow({ sessionId, forward }: ForwardRowProps) {
       <span className="min-w-0 flex-1 truncate font-mono">
         {forward.localPort} → {forward.destHost}:{forward.destPort}
       </span>
-      <button
-        type="button"
-        title={isActive ? t("connectionsPanel.forwards.toggleOff") : t("connectionsPanel.forwards.toggleOn")}
-        aria-label={isActive ? t("connectionsPanel.forwards.toggleOff") : t("connectionsPanel.forwards.toggleOn")}
-        onClick={() => void handleToggle()}
-        className="shrink-0 rounded px-1 py-0.5 hover:bg-border-strong hover:text-fg"
+      <Tooltip
+        label={isActive ? t("connectionsPanel.forwards.toggleOff") : t("connectionsPanel.forwards.toggleOn")}
+        className="shrink-0"
       >
-        {isActive ? "■" : "▶"}
-      </button>
+        <button
+          type="button"
+          aria-label={isActive ? t("connectionsPanel.forwards.toggleOff") : t("connectionsPanel.forwards.toggleOn")}
+          onClick={() => void handleToggle()}
+          className="rounded px-1 py-0.5 hover:bg-border-strong hover:text-fg"
+        >
+          {isActive ? "■" : "▶"}
+        </button>
+      </Tooltip>
     </li>
   );
 }
@@ -252,24 +256,26 @@ function ConnectionRow({ connection, onEdit, onDelete }: ConnectionRowProps) {
           </div>
         ) : (
           <div className="flex shrink-0 items-center opacity-0 group-hover:opacity-100 pr-2">
-            <button
-              type="button"
-              aria-label={t("connectionsPanel.edit")}
-              title={t("connectionsPanel.edit")}
-              onClick={handleEditClick}
-              className="rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
-            >
-              <Pencil size={13} />
-            </button>
-            <button
-              type="button"
-              aria-label={t("connectionsPanel.delete")}
-              title={t("connectionsPanel.delete")}
-              onClick={handleDeleteClick}
-              className="rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-danger"
-            >
-              <Trash2 size={13} />
-            </button>
+            <Tooltip label={t("connectionsPanel.edit")}>
+              <button
+                type="button"
+                aria-label={t("connectionsPanel.edit")}
+                onClick={handleEditClick}
+                className="rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
+              >
+                <Pencil size={13} />
+              </button>
+            </Tooltip>
+            <Tooltip label={t("connectionsPanel.delete")}>
+              <button
+                type="button"
+                aria-label={t("connectionsPanel.delete")}
+                onClick={handleDeleteClick}
+                className="rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-danger"
+              >
+                <Trash2 size={13} />
+              </button>
+            </Tooltip>
           </div>
         )}
       </div>
@@ -372,15 +378,16 @@ export function ConnectionsPanel() {
         <span className="text-xs font-semibold uppercase tracking-wide text-fg-subtle">
           {t("connectionsPanel.title")}
         </span>
-        <button
-          type="button"
-          aria-label={t("connectionsPanel.newConnection")}
-          title={t("connectionsPanel.newConnection")}
-          onClick={openNewForm}
-          className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-        >
-          <Plus size={15} />
-        </button>
+        <Tooltip label={t("connectionsPanel.newConnection")}>
+          <button
+            type="button"
+            aria-label={t("connectionsPanel.newConnection")}
+            onClick={openNewForm}
+            className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+          >
+            <Plus size={15} />
+          </button>
+        </Tooltip>
       </div>
 
       {/* List or empty state */}

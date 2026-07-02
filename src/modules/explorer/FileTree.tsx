@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ChevronDown,
@@ -27,6 +27,7 @@ import { dirname, joinPath, relativePath } from "./lib/paths";
 import { beginEntryDrag, consumeDragClick } from "./lib/dragEntry";
 import { ContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import { InfoDialog } from "@/components/InfoDialog";
+import { Tooltip } from "@/components/Tooltip";
 import { useTabsStore } from "@/stores/tabsStore";
 import { computeLayout } from "@/modules/terminal/lib/terminalLayout";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -43,9 +44,11 @@ interface TreeNodeProps {
   depth: number;
   /** Ask the parent node to reload its children (after a create/delete here). */
   onReloadParent: () => void;
+  /** Increments when the header's collapse-all button fires; folds this node. */
+  collapseSignal?: number;
 }
 
-function TreeNode({ entry, depth, onReloadParent }: TreeNodeProps) {
+function TreeNode({ entry, depth, onReloadParent, collapseSignal }: TreeNodeProps) {
   const { t } = useTranslation("explorer");
   const { t: tCommon } = useTranslation("common");
   const [expanded, setExpanded] = useState(false);
@@ -56,6 +59,14 @@ function TreeNode({ entry, depth, onReloadParent }: TreeNodeProps) {
   // JS hover: CSS :hover is suppressed inside a draggable subtree (WebKit), so
   // track hover manually to highlight just this row.
   const [hovered, setHovered] = useState(false);
+
+  // Skip the initial value (0 / undefined) so a future restore-on-mount of
+  // expanded state wouldn't be immediately collapsed.
+  useEffect(() => {
+    if (collapseSignal) {
+      setExpanded(false);
+    }
+  }, [collapseSignal]);
 
   const openFromSidebar = useTabsStore((s) => s.openFromSidebar);
   const openInNewTab = useTabsStore((s) => s.openInNewTab);
@@ -262,43 +273,44 @@ function TreeNode({ entry, depth, onReloadParent }: TreeNodeProps) {
           )
         }
       >
-        <button
-          type="button"
-          onClick={() => {
-            if (consumeDragClick()) {
-              return;
-            }
-            void toggle();
-          }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setMenu({ x: event.clientX, y: event.clientY });
-          }}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          title={entry.name}
-          style={{ paddingLeft: depth * 12 + 8 }}
-          className={`flex w-full items-center gap-1.5 py-1 pr-2 text-left text-[13px] transition-colors ${
-            isActive
-              ? "bg-accent/15 text-fg"
-              : hovered
-                ? "bg-fg/10 text-fg"
-                : "text-fg-muted"
-          }`}
-        >
-          {entry.is_dir ? (
-            <>
-              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              <FileIcon name={entry.name} isDir open={expanded} size={16} />
-            </>
-          ) : (
-            <>
-              <span className="w-[14px]" />
-              <FileIcon name={entry.name} isDir={false} size={16} />
-            </>
-          )}
-          <span className="truncate">{entry.name}</span>
-        </button>
+        <Tooltip label={entry.name} className="w-full">
+          <button
+            type="button"
+            onClick={() => {
+              if (consumeDragClick()) {
+                return;
+              }
+              void toggle();
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setMenu({ x: event.clientX, y: event.clientY });
+            }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{ paddingLeft: depth * 12 + 8 }}
+            className={`flex w-full items-center gap-1.5 py-1 pr-2 text-left text-[13px] transition-colors ${
+              isActive
+                ? "bg-accent/15 text-fg"
+                : hovered
+                  ? "bg-fg/10 text-fg"
+                  : "text-fg-muted"
+            }`}
+          >
+            {entry.is_dir ? (
+              <>
+                {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <FileIcon name={entry.name} isDir open={expanded} size={16} />
+              </>
+            ) : (
+              <>
+                <span className="w-[14px]" />
+                <FileIcon name={entry.name} isDir={false} size={16} />
+              </>
+            )}
+            <span className="truncate">{entry.name}</span>
+          </button>
+        </Tooltip>
       </div>
 
       {creating && (
@@ -318,6 +330,7 @@ function TreeNode({ entry, depth, onReloadParent }: TreeNodeProps) {
               entry={child}
               depth={depth + 1}
               onReloadParent={reloadChildren}
+              collapseSignal={collapseSignal}
             />
           ))}
         </ul>
@@ -392,9 +405,11 @@ function NewEntryInput({ kind, depth, onConfirm, onCancel }: NewEntryInputProps)
 interface FileTreeProps {
   entries: DirEntry[];
   onReloadRoot: () => void;
+  /** Increments when the header's collapse-all button fires; folds every folder. */
+  collapseSignal?: number;
 }
 
-export function FileTree({ entries, onReloadRoot }: FileTreeProps) {
+export function FileTree({ entries, onReloadRoot, collapseSignal }: FileTreeProps) {
   return (
     <ul className="select-none">
       {entries.map((entry) => (
@@ -403,6 +418,7 @@ export function FileTree({ entries, onReloadRoot }: FileTreeProps) {
           entry={entry}
           depth={0}
           onReloadParent={onReloadRoot}
+          collapseSignal={collapseSignal}
         />
       ))}
     </ul>

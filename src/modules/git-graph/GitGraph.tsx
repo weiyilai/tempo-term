@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Clock, GitBranch, Tag, User } from "lucide-react";
+import { Tooltip } from "@/components/Tooltip";
 import type { CommitNode, CommitRef } from "./types";
 import {
   computeGraphLayout,
@@ -163,35 +164,35 @@ export function GitGraph({
               const isSelected = selectedCommit?.hash === commit.hash;
               const isCurrent = isCurrentCommit(commit);
               return (
-                <button
-                  key={commit.hash}
-                  type="button"
-                  onClick={() => onSelectCommit(commit)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    onCommitContextMenu?.(commit, e.clientX, e.clientY);
-                  }}
-                  style={{
-                    left: `${layout.x - NODE_RADIUS - 2}px`,
-                    top: `${layout.y - NODE_RADIUS - 2}px`,
-                    width: `${(NODE_RADIUS + 2) * 2}px`,
-                    height: `${(NODE_RADIUS + 2) * 2}px`,
-                  }}
-                  title={commit.hash}
-                  className={`absolute z-10 flex items-center justify-center rounded-full transition-all focus:outline-none ${
-                    isSelected ? "scale-125 ring-4 ring-accent/30" : "hover:scale-110"
-                  }`}
-                >
-                  {/* The current (HEAD) node is filled with the accent — a colour
-                      the branch lanes never use — and glows, so it reads as "you
-                      are here" without touching the calm commit rows. */}
-                  <span
-                    className={`h-3 w-3 rounded-full border-2 border-bg ${
-                      isCurrent ? "git-head-node bg-accent" : "shadow-md"
+                <Tooltip key={commit.hash} label={commit.hash}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectCommit(commit)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      onCommitContextMenu?.(commit, e.clientX, e.clientY);
+                    }}
+                    style={{
+                      left: `${layout.x - NODE_RADIUS - 2}px`,
+                      top: `${layout.y - NODE_RADIUS - 2}px`,
+                      width: `${(NODE_RADIUS + 2) * 2}px`,
+                      height: `${(NODE_RADIUS + 2) * 2}px`,
+                    }}
+                    className={`absolute z-10 flex items-center justify-center rounded-full transition-all focus:outline-none ${
+                      isSelected ? "scale-125 ring-4 ring-accent/30" : "hover:scale-110"
                     }`}
-                    style={isCurrent ? undefined : { backgroundColor: color }}
-                  />
-                </button>
+                  >
+                    {/* The current (HEAD) node is filled with the accent — a colour
+                        the branch lanes never use — and glows, so it reads as "you
+                        are here" without touching the calm commit rows. */}
+                    <span
+                      className={`h-3 w-3 rounded-full border-2 border-bg ${
+                        isCurrent ? "git-head-node bg-accent" : "shadow-md"
+                      }`}
+                      style={isCurrent ? undefined : { backgroundColor: color }}
+                    />
+                  </button>
+                </Tooltip>
               );
             })}
           </div>
@@ -242,27 +243,31 @@ export function GitGraph({
                         ref.kind === "remote";
                       const chip = REF_CHIP_STYLES[ref.kind] ?? REF_CHIP_STYLES.branch;
                       return (
-                        <span
+                        <Tooltip
                           key={`${ref.kind}:${ref.name}`}
-                          onClick={(e) => e.stopPropagation()}
-                          onContextMenu={
-                            interactive
-                              ? (e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  onRefContextMenu?.(ref, e.clientX, e.clientY);
-                                }
-                              : undefined
-                          }
-                          title={interactive ? labels.refHint.replace("{{name}}", ref.name) : ref.name}
-                          className={`flex shrink-0 select-none items-center space-x-0.5 rounded border px-1.5 py-0.5 text-[12px] font-medium ${chip} ${
-                            interactive ? "cursor-context-menu" : ""
-                          }`}
+                          label={interactive ? labels.refHint.replace("{{name}}", ref.name) : ref.name}
+                          className="shrink-0"
                         >
-                          {ref.kind === "tag" && <Tag className="h-2.5 w-2.5" />}
-                          {ref.kind === "head" && <Check className="h-2.5 w-2.5" />}
-                          <span>{ref.name}</span>
-                        </span>
+                          <span
+                            onClick={(e) => e.stopPropagation()}
+                            onContextMenu={
+                              interactive
+                                ? (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    onRefContextMenu?.(ref, e.clientX, e.clientY);
+                                  }
+                                : undefined
+                            }
+                            className={`flex select-none items-center space-x-0.5 rounded border px-1.5 py-0.5 text-[12px] font-medium ${chip} ${
+                              interactive ? "cursor-context-menu" : ""
+                            }`}
+                          >
+                            {ref.kind === "tag" && <Tag className="h-2.5 w-2.5" />}
+                            {ref.kind === "head" && <Check className="h-2.5 w-2.5" />}
+                            <span>{ref.name}</span>
+                          </span>
+                        </Tooltip>
                       );
                     })}
 

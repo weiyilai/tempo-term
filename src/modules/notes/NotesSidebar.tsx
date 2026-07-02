@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { ContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import { InfoDialog } from "@/components/InfoDialog";
+import { Tooltip } from "@/components/Tooltip";
 import { useNotesStore } from "@/stores/notesStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useTabsStore } from "@/stores/tabsStore";
@@ -57,22 +58,23 @@ function NoteRow({ note, depth }: { note: NoteNode; depth: number }) {
         <FileText size={14} className="shrink-0 text-fg-subtle" />
         <span className="truncate">{note.title || "Untitled"}</span>
         {note.isConflict && (
-          <span
-            title={t("conflictHint")}
-            className="shrink-0 rounded bg-warning/15 px-1 py-0.5 text-[10px] font-medium uppercase text-warning"
-          >
-            {t("conflictBadge")}
-          </span>
+          <Tooltip label={t("conflictHint")} className="shrink-0">
+            <span className="rounded bg-warning/15 px-1 py-0.5 text-[10px] font-medium uppercase text-warning">
+              {t("conflictBadge")}
+            </span>
+          </Tooltip>
         )}
       </button>
-      <button
-        type="button"
-        aria-label={t("deleteNote")}
-        onClick={() => void deleteNote(note.path)}
-        className="mr-2 rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-danger"
-      >
-        <Trash2 size={13} />
-      </button>
+      <Tooltip label={t("deleteNote")} className="mr-2">
+        <button
+          type="button"
+          aria-label={t("deleteNote")}
+          onClick={() => void deleteNote(note.path)}
+          className="rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-danger"
+        >
+          <Trash2 size={13} />
+        </button>
+      </Tooltip>
       {menu && (
         <ContextMenu
           x={menu.x}
@@ -178,34 +180,38 @@ function FolderRow({ folder, depth }: { folder: FolderNode; depth: number }) {
             className="min-w-0 flex-1 rounded border border-accent bg-bg px-1 py-0.5 text-sm text-fg outline-none"
           />
         ) : (
-          <span
-            onDoubleClick={() => {
-              setEditing(true);
-              setDraft(folder.name);
-            }}
-            className="min-w-0 flex-1 cursor-text truncate py-1 text-sm text-fg-muted"
-            title={t("renameFolderHint")}
-          >
-            {folder.name}
-          </span>
+          <Tooltip label={t("renameFolderHint")} className="min-w-0 flex-1">
+            <span
+              onDoubleClick={() => {
+                setEditing(true);
+                setDraft(folder.name);
+              }}
+              className="min-w-0 flex-1 cursor-text truncate py-1 text-sm text-fg-muted"
+            >
+              {folder.name}
+            </span>
+          </Tooltip>
         )}
-        <button
-          type="button"
-          aria-label={t("newNote")}
-          title={t("newNote")}
-          onClick={newNoteInFolder}
-          className="rounded p-0.5 text-fg-subtle hover:text-fg"
-        >
-          <FilePlus size={13} />
-        </button>
-        <button
-          type="button"
-          aria-label={t("deleteFolder")}
-          onClick={() => void deleteNote(folder.path)}
-          className="mr-2 rounded p-0.5 text-fg-subtle hover:text-danger"
-        >
-          <Trash2 size={13} />
-        </button>
+        <Tooltip label={t("newNote")}>
+          <button
+            type="button"
+            aria-label={t("newNote")}
+            onClick={newNoteInFolder}
+            className="rounded p-0.5 text-fg-subtle hover:text-fg"
+          >
+            <FilePlus size={13} />
+          </button>
+        </Tooltip>
+        <Tooltip label={t("deleteFolder")} className="mr-2">
+          <button
+            type="button"
+            aria-label={t("deleteFolder")}
+            onClick={() => void deleteNote(folder.path)}
+            className="rounded p-0.5 text-fg-subtle hover:text-danger"
+          >
+            <Trash2 size={13} />
+          </button>
+        </Tooltip>
       </div>
       {!collapsed && (
         <ul>
@@ -276,24 +282,26 @@ export function NotesSidebar() {
           {t("title")}
         </span>
         <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            aria-label={t("newNote")}
-            title={t("newNote")}
-            onClick={newNote}
-            className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-          >
-            <FilePlus size={15} />
-          </button>
-          <button
-            type="button"
-            aria-label={t("newFolder")}
-            title={t("newFolder")}
-            onClick={newFolder}
-            className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-          >
-            <FolderPlus size={15} />
-          </button>
+          <Tooltip label={t("newNote")}>
+            <button
+              type="button"
+              aria-label={t("newNote")}
+              onClick={newNote}
+              className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+            >
+              <FilePlus size={15} />
+            </button>
+          </Tooltip>
+          <Tooltip label={t("newFolder")}>
+            <button
+              type="button"
+              aria-label={t("newFolder")}
+              onClick={newFolder}
+              className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+            >
+              <FolderPlus size={15} />
+            </button>
+          </Tooltip>
         </div>
       </div>
 

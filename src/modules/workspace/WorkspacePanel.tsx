@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTabsStore, type Tab, type TabKind } from "@/stores/tabsStore";
+import { Tooltip } from "@/components/Tooltip";
 import { ContextMenu } from "@/components/ContextMenu";
 import { tabContextMenuItems } from "@/components/tabContextMenuItems";
 import { useTabCloseRequest } from "@/components/useTabCloseRequest";
@@ -166,12 +167,13 @@ const PR_STATE_STYLE: Record<string, string> = {
 
 function PrBadge({ pr }: { pr: PrInfo }) {
   return (
-    <span
-      className={`inline-flex items-center gap-1 text-[11px] ${PR_STATE_STYLE[pr.state] ?? "text-fg-subtle"}`}
-      title={pr.title ?? undefined}
-    >
-      <GitPullRequest size={11} className="shrink-0" />#{pr.number} {pr.state}
-    </span>
+    <Tooltip label={pr.title} className="shrink-0">
+      <span
+        className={`inline-flex items-center gap-1 text-[11px] ${PR_STATE_STYLE[pr.state] ?? "text-fg-subtle"}`}
+      >
+        <GitPullRequest size={11} className="shrink-0" />#{pr.number} {pr.state}
+      </span>
+    </Tooltip>
   );
 }
 
@@ -426,41 +428,44 @@ function SpaceGroup({ id, name, filter }: { id: string; name: string; filter: St
 
         {!editing && (
           <div className="flex shrink-0 items-center gap-0.5">
-            <button
-              type="button"
-              aria-label={t("workspace.renameSpace")}
-              title={t("workspace.renameSpace")}
-              onClick={() => {
-                setDraft(name);
-                setEditing(true);
-              }}
-              className="shrink-0 rounded p-0.5 text-fg-subtle transition-colors hover:text-fg"
-            >
-              <Pencil size={12} />
-            </button>
-            <button
-              type="button"
-              aria-label={t("workspace.deleteSpace")}
-              title={t("workspace.deleteSpace")}
-              onClick={() => deleteSpace(id)}
-              className="shrink-0 rounded p-0.5 text-fg-subtle transition-colors hover:text-danger"
-            >
-              <Trash2 size={12} />
-            </button>
-            <button
-              type="button"
-              aria-label={t("workspace.addTab")}
-              title={t("workspace.addTab")}
-              onClick={() => {
-                setActiveSpace(id);
-                openLauncherTab();
-                // Expand the group so the freshly added card is visible.
-                setCollapsed(false);
-              }}
-              className="shrink-0 rounded p-0.5 text-fg-subtle transition-colors hover:text-fg"
-            >
-              <Plus size={12} />
-            </button>
+            <Tooltip label={t("workspace.renameSpace")} className="shrink-0">
+              <button
+                type="button"
+                aria-label={t("workspace.renameSpace")}
+                onClick={() => {
+                  setDraft(name);
+                  setEditing(true);
+                }}
+                className="shrink-0 rounded p-0.5 text-fg-subtle transition-colors hover:text-fg"
+              >
+                <Pencil size={12} />
+              </button>
+            </Tooltip>
+            <Tooltip label={t("workspace.deleteSpace")} className="shrink-0">
+              <button
+                type="button"
+                aria-label={t("workspace.deleteSpace")}
+                onClick={() => deleteSpace(id)}
+                className="shrink-0 rounded p-0.5 text-fg-subtle transition-colors hover:text-danger"
+              >
+                <Trash2 size={12} />
+              </button>
+            </Tooltip>
+            <Tooltip label={t("workspace.addTab")} className="shrink-0">
+              <button
+                type="button"
+                aria-label={t("workspace.addTab")}
+                onClick={() => {
+                  setActiveSpace(id);
+                  openLauncherTab();
+                  // Expand the group so the freshly added card is visible.
+                  setCollapsed(false);
+                }}
+                className="shrink-0 rounded p-0.5 text-fg-subtle transition-colors hover:text-fg"
+              >
+                <Plus size={12} />
+              </button>
+            </Tooltip>
           </div>
         )}
       </div>

@@ -170,23 +170,25 @@ textarea:focus-visible,
 .note-md li { margin: 0.2em 0; }
 .note-md li > input[type="checkbox"] { margin-right: 0.4em; }
 .note-md a { color: var(--color-accent); text-decoration: underline; cursor: pointer; }
-/* Shared hover tooltip for terminal links (xterm has no native tooltip). */
+/* Shared hover tooltip for terminal links (xterm has no native tooltip).
+   Metrics mirror components/Tooltip.tsx so every tooltip reads the same. */
 .terminal-link-tooltip {
   position: fixed;
   z-index: 9999;
   display: none;
   pointer-events: none;
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1rem;
   color: var(--color-fg);
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-strong);
   border-radius: 6px;
-  padding: 2px 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  padding: 4px 8px;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
-/* Instant hover hint for editor links (native title is too slow to be useful). */
+/* Instant hover hint for editor links (native title is too slow to be useful).
+   Metrics mirror components/Tooltip.tsx so every tooltip reads the same. */
 .tiptap a[data-link-hint] { position: relative; }
 .tiptap a[data-link-hint]:hover::after {
   content: attr(data-link-hint);
@@ -197,14 +199,14 @@ textarea:focus-visible,
   z-index: 50;
   white-space: nowrap;
   pointer-events: none;
-  font-size: 11px;
-  line-height: 1.4;
+  font-size: 12px;
+  line-height: 1rem;
   color: var(--color-fg);
   background: var(--color-bg-elevated);
   border: 1px solid var(--color-border-strong);
   border-radius: 6px;
-  padding: 2px 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  padding: 4px 8px;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 .note-md strong { font-weight: 700; }
 .note-md em { font-style: italic; }

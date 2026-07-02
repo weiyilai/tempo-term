@@ -1,5 +1,6 @@
+import { act } from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "@/i18n";
 import { TabBar } from "./TabBar";
 import { useTabsStore } from "@/stores/tabsStore";
@@ -31,6 +32,21 @@ afterEach(() => {
   useEntryDragStore.setState({ tabBarHover: null });
   useNoteDragStore.setState({ tabBarHover: null });
   useSshDragStore.setState({ tabBarHover: null });
+});
+
+describe("TabBar close button tooltip", () => {
+  it("shows no tooltip on a clean tab's close button (the ✕ is self-explanatory)", () => {
+    vi.useFakeTimers();
+    try {
+      render(<TabBar />);
+      const close = screen.getByLabelText("Close Tab");
+      fireEvent.mouseEnter(close.parentElement!);
+      act(() => vi.advanceTimersByTime(1000));
+      expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe("TabBar tab context menu", () => {
@@ -126,7 +142,11 @@ describe("TabBar insertion line", () => {
     expect(tabBar).not.toBeNull();
     const children = Array.from(tabBar!.children);
     const lineIndex = children.findIndex((el) => el.getAttribute("data-testid") === "tab-insertion-line");
-    const addButtonIndex = children.findIndex((el) => el.getAttribute("aria-label") === "Add tab");
+    // The add-tab button sits inside its Tooltip wrapper, so match the child
+    // that contains it rather than the button element itself.
+    const addButtonIndex = children.findIndex(
+      (el) => el.querySelector('[aria-label="Add tab"]') !== null,
+    );
     expect(lineIndex).toBeGreaterThanOrEqual(0);
     expect(lineIndex).toBe(addButtonIndex - 1);
   });

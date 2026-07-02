@@ -33,6 +33,7 @@ const GitGraphTabContent = lazy(() =>
 import { LauncherPanel } from "@/components/LauncherPanel";
 import { dropOverlayClassName, outerBandOverlayClassName } from "@/components/EntryDropOverlay";
 import { InfoDialog } from "@/components/InfoDialog";
+import { Tooltip } from "@/components/Tooltip";
 import {
   fileUrl,
   shellQuotePath,
@@ -395,19 +396,20 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
               }`}
             >
               {multiple && (
-                <button
-                  type="button"
-                  aria-label={t("workspace.closePane")}
-                  title={t("workspace.closePane")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void deleteTerminalHistory(pane.id);
-                    closePane(tab.id, pane.id);
-                  }}
-                  className="absolute right-1.5 top-1.5 z-10 rounded bg-bg-inset/80 p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
-                >
-                  <X size={12} />
-                </button>
+                <Tooltip label={t("workspace.closePane")} className="absolute right-1.5 top-1.5 z-10">
+                  <button
+                    type="button"
+                    aria-label={t("workspace.closePane")}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void deleteTerminalHistory(pane.id);
+                      closePane(tab.id, pane.id);
+                    }}
+                    className="rounded bg-bg-inset/80 p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
+                  >
+                    <X size={12} />
+                  </button>
+                </Tooltip>
               )}
               <Suspense
                 fallback={

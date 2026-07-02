@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Resizer } from "@/components/Resizer";
+import { Tooltip } from "@/components/Tooltip";
 import { useChatStore } from "@/modules/ai/store/chatStore";
 import { gitCommitDetails, gitCommitFileDiff } from "./lib/gitGraphBridge";
 import { parseDiffLines } from "./lib/parseDiff";
@@ -159,14 +160,16 @@ export function CommitDetailsPanel({ repo, commit, onClose, labels }: CommitDeta
         <span className="select-all font-mono text-xs font-semibold text-accent">
           {commit.hash}
         </span>
-        <button
-          type="button"
-          onClick={onClose}
-          title={labels.close}
-          className="rounded p-1 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
+        <Tooltip label={labels.close}>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={labels.close}
+            className="rounded p-1 text-fg-subtle hover:bg-bg-elevated hover:text-fg"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </Tooltip>
       </div>
 
       {error && <div className="px-3 py-1.5 text-xs text-danger" role="alert">{error}</div>}

@@ -28,6 +28,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { useTabsStore, type Tab } from "@/stores/tabsStore";
+import { Tooltip } from "@/components/Tooltip";
 import { useTabCloseRequest } from "./useTabCloseRequest";
 import { useUiStore } from "@/stores/uiStore";
 import { IS_MAC } from "@/lib/platform";
@@ -115,7 +116,6 @@ function TabItem({ id }: { id: string }) {
         e.preventDefault();
         setMenu({ x: e.clientX, y: e.clientY });
       }}
-      title={tab.title}
       className={`group flex h-7 cursor-pointer items-center gap-2 rounded-md px-3 text-xs transition-colors ${
         active ? "bg-bg-elevated text-fg" : "text-fg-muted hover:bg-bg-elevated/60"
       } ${isDragging ? "opacity-40" : ""}`}
@@ -137,33 +137,38 @@ function TabItem({ id }: { id: string }) {
           className="w-28 rounded border border-accent bg-bg px-1 text-xs text-fg outline-none"
         />
       ) : (
-        <span className="max-w-[160px] truncate">{tab.title}</span>
+        <Tooltip label={tab.title} side="bottom" className="min-w-0">
+          <span className="max-w-[160px] truncate">{tab.title}</span>
+        </Tooltip>
       )}
-      <button
-        type="button"
-        aria-label={dirty ? t("editor:unsaved") : t("actions.closeTab")}
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          requestClose();
-        }}
-        className="group/close rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
-      >
-        {dirty ? (
-          <>
-            <span className="block h-3 w-3 group-hover/close:hidden">
-              <span className="flex h-full w-full items-center justify-center">
-                <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+      {/* The ✕ glyph is self-explanatory; only the dirty dot needs a hint. */}
+      <Tooltip label={dirty ? t("editor:unsaved") : undefined} side="bottom">
+        <button
+          type="button"
+          aria-label={dirty ? t("editor:unsaved") : t("actions.closeTab")}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            requestClose();
+          }}
+          className="group/close rounded p-0.5 text-fg-subtle hover:bg-border-strong hover:text-fg"
+        >
+          {dirty ? (
+            <>
+              <span className="block h-3 w-3 group-hover/close:hidden">
+                <span className="flex h-full w-full items-center justify-center">
+                  <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+                </span>
               </span>
-            </span>
-            <span className="hidden h-3 w-3 items-center justify-center group-hover/close:flex">
-              <X size={13} />
-            </span>
-          </>
-        ) : (
-          <X size={13} />
-        )}
-      </button>
+              <span className="hidden h-3 w-3 items-center justify-center group-hover/close:flex">
+                <X size={13} />
+              </span>
+            </>
+          ) : (
+            <X size={13} />
+          )}
+        </button>
+      </Tooltip>
       {confirmCloseDialog}
       {menu && (
         <ContextMenu
@@ -240,18 +245,19 @@ export function TabBar() {
         IS_MAC ? "pl-20" : "pl-3"
       }`}
     >
-      <button
-        type="button"
-        aria-label={t("workspace.toggleSidebar")}
-        title={t("workspace.toggleSidebar")}
-        aria-pressed={sidebarVisible}
-        onClick={toggleSidebar}
-        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-bg-elevated ${
-          sidebarVisible ? "text-fg" : "text-fg-subtle hover:text-fg"
-        }`}
-      >
-        <PanelLeft size={16} />
-      </button>
+      <Tooltip label={t("workspace.toggleSidebar")} side="bottom" className="shrink-0">
+        <button
+          type="button"
+          aria-label={t("workspace.toggleSidebar")}
+          aria-pressed={sidebarVisible}
+          onClick={toggleSidebar}
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-bg-elevated ${
+            sidebarVisible ? "text-fg" : "text-fg-subtle hover:text-fg"
+          }`}
+        >
+          <PanelLeft size={16} />
+        </button>
+      </Tooltip>
       <SpaceDropdown />
       <div className="mx-1 h-4 w-px shrink-0 bg-border" />
       <DndContext
@@ -278,15 +284,16 @@ export function TabBar() {
             ))}
           </SortableContext>
           {tabBarHover !== null && tabBarHover.insertBeforeId === null && <TabInsertionLine />}
-          <button
-            type="button"
-            aria-label={t("workspace.addTab")}
-            title={t("workspace.addTab")}
-            onClick={() => openLauncherTab()}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-bg-elevated hover:text-fg"
-          >
-            <Plus size={16} />
-          </button>
+          <Tooltip label={t("workspace.addTab")} side="bottom" className="shrink-0">
+            <button
+              type="button"
+              aria-label={t("workspace.addTab")}
+              onClick={() => openLauncherTab()}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-bg-elevated hover:text-fg"
+            >
+              <Plus size={16} />
+            </button>
+          </Tooltip>
         </div>
         <DragOverlay>{draggingTab ? <TabOverlay tab={draggingTab} /> : null}</DragOverlay>
       </DndContext>
