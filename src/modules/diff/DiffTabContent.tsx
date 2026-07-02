@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { MergeView } from "@codemirror/merge";
+import { ChevronDown, ChevronUp, WrapText } from "lucide-react";
+import { goToNextChunk, goToPreviousChunk, MergeView } from "@codemirror/merge";
 import { EditorState } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { EditorView, lineNumbers } from "@codemirror/view";
+import { Tooltip } from "@/components/Tooltip";
 import { gitFileAtRev, gitResolveRepo } from "@/modules/source-control/lib/gitBridge";
 import { fsReadFile } from "@/modules/explorer/lib/fsBridge";
 import { loadLanguageExtension } from "@/modules/editor/lib/language";
@@ -32,9 +34,14 @@ interface DiffDocs {
  */
 export function DiffTabContent({ path, staged }: DiffTabContentProps) {
   const { t } = useTranslation("sourceControl");
+  const { t: tEditor } = useTranslation("editor");
   const containerRef = useRef<HTMLDivElement>(null);
+  const mergeViewRef = useRef<MergeView | null>(null);
   const fontFamily = useFontStore(selectTerminalFontFamily);
   const themeId = useSettingsStore((s) => s.themeId);
+  // Shares the editor's word-wrap setting so both surfaces toggle together.
+  const wordWrap = useSettingsStore((s) => s.wordWrap);
+  const toggleWordWrap = useSettingsStore((s) => s.toggleWordWrap);
   const [docs, setDocs] = useState<DiffDocs | null>(null);
   const [error, setError] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -103,6 +110,8 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
           "&": { fontSize: "13px" },
           ".cm-content, .cm-gutters, .cm-scroller": { fontFamily },
         }),
+        lineNumbers(),
+        ...(wordWrap ? [EditorView.lineWrapping] : []),
         ...language,
       ];
       view = new MergeView({
@@ -111,12 +120,24 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
         parent,
         gutter: true,
       });
+      mergeViewRef.current = view;
     });
     return () => {
       cancelled = true;
+      mergeViewRef.current = null;
       view?.destroy();
     };
-  }, [docs, path, themeId, fontFamily]);
+  }, [docs, path, themeId, fontFamily, wordWrap]);
+
+  // Jump the selection (and scroll) to the previous/next changed chunk.
+  function goToChunk(direction: "prev" | "next") {
+    const view = mergeViewRef.current;
+    if (!view) {
+      return;
+    }
+    const command = direction === "next" ? goToNextChunk : goToPreviousChunk;
+    command(view.b);
+  }
 
   const name = path.split(/[\\/]/).pop() ?? path;
 
@@ -127,6 +148,43 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
         <span className="shrink-0 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] font-medium uppercase text-fg-subtle">
           {staged ? t("diffStaged") : t("diffUnstaged")}
         </span>
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          <Tooltip label={t("diffPrevChange")}>
+            <button
+              type="button"
+              aria-label={t("diffPrevChange")}
+              onClick={() => goToChunk("prev")}
+              className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+            >
+              <ChevronUp size={14} />
+            </button>
+          </Tooltip>
+          <Tooltip label={t("diffNextChange")}>
+            <button
+              type="button"
+              aria-label={t("diffNextChange")}
+              onClick={() => goToChunk("next")}
+              className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+            >
+              <ChevronDown size={14} />
+            </button>
+          </Tooltip>
+          <Tooltip label={tEditor("wrap")}>
+            <button
+              type="button"
+              aria-label={tEditor("wrap")}
+              aria-pressed={wordWrap}
+              onClick={toggleWordWrap}
+              className={`rounded p-1 ${
+                wordWrap
+                  ? "bg-bg-elevated text-fg"
+                  : "text-fg-muted hover:bg-bg-elevated hover:text-fg"
+              }`}
+            >
+              <WrapText size={14} />
+            </button>
+          </Tooltip>
+        </div>
       </div>
       {error ? (
         <p className="px-3 py-2 text-xs text-danger">{t("diffLoadError")}</p>
