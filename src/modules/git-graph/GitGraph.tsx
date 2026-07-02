@@ -106,7 +106,7 @@ export function GitGraph({
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border p-8 py-16 text-center">
         <GitBranch className="mb-3 h-10 w-10 animate-pulse text-fg-subtle" />
         <p className="font-medium text-fg">{labels.emptyTitle}</p>
-        <p className="mt-1 max-w-sm text-xs text-fg-subtle">{labels.emptyHint}</p>
+        <p className="mt-1 max-w-sm text-[13px] text-fg-subtle">{labels.emptyHint}</p>
       </div>
     );
   }
@@ -274,12 +274,12 @@ export function GitGraph({
                       );
                     })}
 
-                    <span className="truncate font-sans text-xs font-medium text-fg">
+                    <span className="truncate font-sans text-[13px] font-medium text-fg">
                       {commit.message}
                     </span>
                   </div>
 
-                  <div className="flex shrink-0 items-center space-x-4 font-mono text-[12px] text-fg-subtle">
+                  <div className="flex shrink-0 items-center space-x-4 font-mono text-[13px] text-fg-subtle">
                     <div className="flex items-center space-x-1">
                       <User className="h-3 w-3" />
                       <span className="max-w-[70px] truncate">{commit.author}</span>
