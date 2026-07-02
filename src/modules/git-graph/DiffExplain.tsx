@@ -136,7 +136,6 @@ export function DiffExplain({
         <button
           type="button"
           onClick={regenerate}
-          title={labels.regenerate}
           className="flex items-center gap-1 rounded p-1 text-[11px] text-fg-subtle hover:bg-bg-elevated hover:text-fg"
         >
           <RefreshCw className="h-3 w-3" />

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeft, ArrowRight, RotateCw } from "lucide-react";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { Tooltip } from "@/components/Tooltip";
 import { onEditorFileChanged } from "@/modules/editor/lib/editorWatch";
 import { normalizeAddressInput } from "@/lib/url";
 import { previewLocalPath } from "./lib/htmlPreviewTarget";
@@ -111,24 +112,26 @@ export function PreviewTabContent({
           onNavigate?.(next);
         }}
       >
-        <button
-          type="button"
-          aria-label={t("back")}
-          title={t("back")}
-          onClick={back}
-          className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-        >
-          <ArrowLeft size={14} />
-        </button>
-        <button
-          type="button"
-          aria-label={t("forward")}
-          title={t("forward")}
-          onClick={forward}
-          className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-        >
-          <ArrowRight size={14} />
-        </button>
+        <Tooltip label={t("back")}>
+          <button
+            type="button"
+            aria-label={t("back")}
+            onClick={back}
+            className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+          >
+            <ArrowLeft size={14} />
+          </button>
+        </Tooltip>
+        <Tooltip label={t("forward")}>
+          <button
+            type="button"
+            aria-label={t("forward")}
+            onClick={forward}
+            className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+          >
+            <ArrowRight size={14} />
+          </button>
+        </Tooltip>
         <input
           ref={inputRef}
           value={input}
@@ -137,15 +140,16 @@ export function PreviewTabContent({
           aria-label={t("urlPlaceholder")}
           className="min-w-0 flex-1 rounded-md border border-border bg-bg-inset px-3 py-1 text-xs text-fg outline-none focus:border-accent"
         />
-        <button
-          type="button"
-          aria-label={t("reload")}
-          title={t("reload")}
-          onClick={reload}
-          className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-        >
-          <RotateCw size={14} />
-        </button>
+        <Tooltip label={t("reload")}>
+          <button
+            type="button"
+            aria-label={t("reload")}
+            onClick={reload}
+            className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+          >
+            <RotateCw size={14} />
+          </button>
+        </Tooltip>
       </form>
       {/* The native preview webview is composited over this host element; it is
           positioned to match the host's rect. bg-white shows while the webview

@@ -27,6 +27,7 @@ import { dirname, joinPath, relativePath } from "./lib/paths";
 import { beginEntryDrag, consumeDragClick } from "./lib/dragEntry";
 import { ContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
 import { InfoDialog } from "@/components/InfoDialog";
+import { Tooltip } from "@/components/Tooltip";
 import { useTabsStore } from "@/stores/tabsStore";
 import { computeLayout } from "@/modules/terminal/lib/terminalLayout";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -262,43 +263,44 @@ function TreeNode({ entry, depth, onReloadParent }: TreeNodeProps) {
           )
         }
       >
-        <button
-          type="button"
-          onClick={() => {
-            if (consumeDragClick()) {
-              return;
-            }
-            void toggle();
-          }}
-          onContextMenu={(event) => {
-            event.preventDefault();
-            setMenu({ x: event.clientX, y: event.clientY });
-          }}
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          title={entry.name}
-          style={{ paddingLeft: depth * 12 + 8 }}
-          className={`flex w-full items-center gap-1.5 py-1 pr-2 text-left text-[13px] transition-colors ${
-            isActive
-              ? "bg-accent/15 text-fg"
-              : hovered
-                ? "bg-fg/10 text-fg"
-                : "text-fg-muted"
-          }`}
-        >
-          {entry.is_dir ? (
-            <>
-              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              <FileIcon name={entry.name} isDir open={expanded} size={16} />
-            </>
-          ) : (
-            <>
-              <span className="w-[14px]" />
-              <FileIcon name={entry.name} isDir={false} size={16} />
-            </>
-          )}
-          <span className="truncate">{entry.name}</span>
-        </button>
+        <Tooltip label={entry.name} className="w-full">
+          <button
+            type="button"
+            onClick={() => {
+              if (consumeDragClick()) {
+                return;
+              }
+              void toggle();
+            }}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              setMenu({ x: event.clientX, y: event.clientY });
+            }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{ paddingLeft: depth * 12 + 8 }}
+            className={`flex w-full items-center gap-1.5 py-1 pr-2 text-left text-[13px] transition-colors ${
+              isActive
+                ? "bg-accent/15 text-fg"
+                : hovered
+                  ? "bg-fg/10 text-fg"
+                  : "text-fg-muted"
+            }`}
+          >
+            {entry.is_dir ? (
+              <>
+                {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                <FileIcon name={entry.name} isDir open={expanded} size={16} />
+              </>
+            ) : (
+              <>
+                <span className="w-[14px]" />
+                <FileIcon name={entry.name} isDir={false} size={16} />
+              </>
+            )}
+            <span className="truncate">{entry.name}</span>
+          </button>
+        </Tooltip>
       </div>
 
       {creating && (

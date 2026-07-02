@@ -9,6 +9,7 @@ import { buildActiveFileBlock, buildTerminalBlock } from "./lib/context";
 import { extractCommand, sanitizeForInsertion } from "./lib/command";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { Combobox } from "@/components/Combobox";
+import { Tooltip } from "@/components/Tooltip";
 import { fsReadFile } from "@/modules/explorer/lib/fsBridge";
 import { basename } from "@/modules/explorer/lib/paths";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
@@ -210,15 +211,16 @@ export function AIView() {
           className="min-w-0 flex-1"
           textClassName="text-[13px]"
         />
-        <button
-          type="button"
-          aria-label={t("clear")}
-          title={t("clear")}
-          onClick={clear}
-          className="shrink-0 rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-        >
-          <Trash2 size={15} />
-        </button>
+        <Tooltip label={t("clear")} className="shrink-0">
+          <button
+            type="button"
+            aria-label={t("clear")}
+            onClick={clear}
+            className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+          >
+            <Trash2 size={15} />
+          </button>
+        </Tooltip>
       </div>
 
       {provider.needsKey && !hasKey && (
@@ -263,7 +265,6 @@ export function AIView() {
                 {command && (
                   <button
                     type="button"
-                    title={t("insertCommand")}
                     onClick={() => insertIntoActiveTerminal(sanitizeForInsertion(command))}
                     className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-fg-muted transition-colors hover:bg-bg-elevated hover:text-fg"
                   >
@@ -294,59 +295,65 @@ export function AIView() {
         {(attachedPaths.length > 0 || includeTerminal) && (
           <div className="mb-2 flex flex-wrap gap-1.5">
             {includeTerminal && (
-              <span
-                title={t("terminalContextTitle")}
-                className="inline-flex max-w-[200px] items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-2 py-1 text-xs text-fg-muted"
-              >
+              <span className="inline-flex max-w-[200px] items-center gap-1 rounded-md border border-accent/40 bg-accent/10 px-2 py-1 text-xs text-fg-muted">
                 <SquareTerminal size={11} className="shrink-0 text-accent" />
-                <span className="truncate">{t("terminalContextChip")}</span>
-                <button
-                  type="button"
-                  aria-label={t("removeTerminalContext")}
-                  title={t("removeTerminalContext")}
-                  onClick={() => setIncludeTerminal(false)}
-                  className="shrink-0 rounded text-fg-subtle hover:text-fg"
-                >
-                  <X size={12} />
-                </button>
+                <Tooltip label={t("terminalContextTitle")} className="min-w-0">
+                  <span className="truncate">{t("terminalContextChip")}</span>
+                </Tooltip>
+                <Tooltip label={t("removeTerminalContext")} className="shrink-0">
+                  <button
+                    type="button"
+                    aria-label={t("removeTerminalContext")}
+                    onClick={() => setIncludeTerminal(false)}
+                    className="rounded text-fg-subtle hover:text-fg"
+                  >
+                    <X size={12} />
+                  </button>
+                </Tooltip>
               </span>
             )}
             {attachedPaths.map((path) => (
               <span
                 key={path}
-                title={path}
                 className="inline-flex max-w-[180px] items-center gap-1 rounded-md border border-border bg-bg px-2 py-1 text-xs text-fg-muted"
               >
                 <Paperclip size={11} className="shrink-0 text-fg-subtle" />
-                <span className="truncate">{basename(path)}</span>
-                <button
-                  type="button"
-                  aria-label={t("removeAttachment")}
-                  title={t("removeAttachment")}
-                  onClick={() => removeAttached(path)}
-                  className="shrink-0 rounded text-fg-subtle hover:text-fg"
-                >
-                  <X size={12} />
-                </button>
+                <Tooltip label={path} className="min-w-0">
+                  <span className="truncate">{basename(path)}</span>
+                </Tooltip>
+                <Tooltip label={t("removeAttachment")} className="shrink-0">
+                  <button
+                    type="button"
+                    aria-label={t("removeAttachment")}
+                    onClick={() => removeAttached(path)}
+                    className="rounded text-fg-subtle hover:text-fg"
+                  >
+                    <X size={12} />
+                  </button>
+                </Tooltip>
               </span>
             ))}
           </div>
         )}
         <div className="flex items-end gap-2">
-          <button
-            type="button"
-            aria-pressed={includeTerminal}
-            aria-label={includeTerminal ? t("grabTerminalActive") : t("grabTerminal")}
-            title={includeTerminal ? t("grabTerminalActive") : t("grabTerminal")}
-            onClick={() => setIncludeTerminal(!includeTerminal)}
-            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-colors ${
-              includeTerminal
-                ? "border-accent bg-accent/10 text-accent hover:bg-accent/15"
-                : "border-border text-fg-muted hover:bg-bg-elevated hover:text-fg"
-            }`}
+          <Tooltip
+            label={includeTerminal ? t("grabTerminalActive") : t("grabTerminal")}
+            className="shrink-0"
           >
-            <SquareTerminal size={16} />
-          </button>
+            <button
+              type="button"
+              aria-pressed={includeTerminal}
+              aria-label={includeTerminal ? t("grabTerminalActive") : t("grabTerminal")}
+              onClick={() => setIncludeTerminal(!includeTerminal)}
+              className={`flex h-9 w-9 items-center justify-center rounded-md border transition-colors ${
+                includeTerminal
+                  ? "border-accent bg-accent/10 text-accent hover:bg-accent/15"
+                  : "border-border text-fg-muted hover:bg-bg-elevated hover:text-fg"
+              }`}
+            >
+              <SquareTerminal size={16} />
+            </button>
+          </Tooltip>
           <textarea
             ref={inputRef}
             value={input}

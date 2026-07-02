@@ -6,6 +6,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useTabsStore } from "@/stores/tabsStore";
 import { message } from "@tauri-apps/plugin-dialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Tooltip } from "@/components/Tooltip";
 import { usePorts } from "./lib/usePorts";
 import { killPortProcess, type PortInfo } from "./lib/portsBridge";
 import { PortsPanel } from "./PortsPanel";
@@ -47,16 +48,17 @@ export function PortsIndicator() {
 
   return (
     <div className="relative">
-      <button
-        type="button"
-        title={t("ports.title")}
-        aria-label={t("ports.count", { count })}
-        onClick={() => setOpen(!open)}
-        className="flex h-5 items-center gap-1 rounded px-1.5 text-fg-subtle transition-colors hover:text-fg"
-      >
-        <EthernetPort size={14} strokeWidth={1.75} />
-        <span className="text-xs">{count}</span>
-      </button>
+      <Tooltip label={t("ports.title")} side="top">
+        <button
+          type="button"
+          aria-label={t("ports.count", { count })}
+          onClick={() => setOpen(!open)}
+          className="flex h-5 items-center gap-1 rounded px-1.5 text-fg-subtle transition-colors hover:text-fg"
+        >
+          <EthernetPort size={14} strokeWidth={1.75} />
+          <span className="text-xs">{count}</span>
+        </button>
+      </Tooltip>
       <PortsPanel
         ports={ports}
         open={open}

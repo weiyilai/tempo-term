@@ -96,14 +96,14 @@ describe("GitGraphToolbar responsive layout", () => {
     renderToolbar();
 
     // Roomy by default: inline refresh icon present, no overflow button.
-    expect(screen.getByTitle(labels.refresh)).toBeInTheDocument();
-    expect(screen.queryByTitle(labels.more)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(labels.refresh)).toBeInTheDocument();
+    expect(screen.queryByLabelText(labels.more)).not.toBeInTheDocument();
 
     setToolbarWidth(360);
 
     // Compact: the icon cluster is replaced by a single overflow button.
-    expect(screen.getByTitle(labels.more)).toBeInTheDocument();
-    expect(screen.queryByTitle(labels.refresh)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(labels.more)).toBeInTheDocument();
+    expect(screen.queryByLabelText(labels.refresh)).not.toBeInTheDocument();
   });
 
   it("keeps the branch dropdown and search reachable when compact", () => {
@@ -111,14 +111,14 @@ describe("GitGraphToolbar responsive layout", () => {
     setToolbarWidth(360);
 
     expect(screen.getAllByLabelText(labels.branches).length).toBeGreaterThan(0);
-    expect(screen.getByTitle(labels.search)).toBeInTheDocument();
+    expect(screen.getByLabelText(labels.search)).toBeInTheDocument();
   });
 
   it("exposes head info, refresh, fetch and all toggles inside the overflow menu", () => {
     renderToolbar({ currentBranch: "feature/x" });
     setToolbarWidth(360);
 
-    fireEvent.click(screen.getByTitle(labels.more));
+    fireEvent.click(screen.getByLabelText(labels.more));
 
     expect(screen.getByText(`${labels.head}: feature/x`)).toBeInTheDocument();
     expect(screen.getByText(labels.refresh)).toBeInTheDocument();
@@ -131,16 +131,16 @@ describe("GitGraphToolbar responsive layout", () => {
   it("invokes the same callbacks when actions and toggles are used from the overflow menu", () => {
     const props = renderToolbar();
     setToolbarWidth(360);
-    fireEvent.click(screen.getByTitle(labels.more));
+    fireEvent.click(screen.getByLabelText(labels.more));
 
     fireEvent.click(screen.getByText(labels.refresh));
     expect(props.onRefresh).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByTitle(labels.more));
+    fireEvent.click(screen.getByLabelText(labels.more));
     fireEvent.click(screen.getByText(labels.fetch));
     expect(props.onFetch).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(screen.getByTitle(labels.more));
+    fireEvent.click(screen.getByLabelText(labels.more));
     fireEvent.click(screen.getByText(labels.showRemoteBranches));
     expect(props.onToggleRemotes).toHaveBeenCalledWith(true);
   });
@@ -149,17 +149,17 @@ describe("GitGraphToolbar responsive layout", () => {
     renderToolbar();
     setToolbarWidth(360);
 
-    fireEvent.click(screen.getByTitle(labels.search));
+    fireEvent.click(screen.getByLabelText(labels.search));
     expect(screen.queryByLabelText(labels.branches)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTitle(labels.search));
+    fireEvent.click(screen.getByLabelText(labels.search));
     expect(screen.getAllByLabelText(labels.branches).length).toBeGreaterThan(0);
   });
 
   it("spins and disables the refresh control while a reload is in flight (roomy)", () => {
     renderToolbar({ refreshing: true });
 
-    const button = screen.getByTitle(labels.refresh);
+    const button = screen.getByLabelText(labels.refresh);
     expect(button).toBeDisabled();
     expect(button.querySelector(".animate-spin")).not.toBeNull();
   });
@@ -167,7 +167,7 @@ describe("GitGraphToolbar responsive layout", () => {
   it("spins and disables the refresh row while a reload is in flight (compact)", () => {
     renderToolbar({ refreshing: true });
     setToolbarWidth(360);
-    fireEvent.click(screen.getByTitle(labels.more));
+    fireEvent.click(screen.getByLabelText(labels.more));
 
     const row = screen.getByText(labels.refresh).closest("button");
     expect(row).toBeDisabled();
@@ -179,7 +179,7 @@ describe("GitGraphToolbar commit ordering", () => {
   it("changes the order from the display-options popover (roomy)", () => {
     const props = renderToolbar({ commitOrder: "date" });
 
-    fireEvent.click(screen.getByTitle(labels.displayOptions));
+    fireEvent.click(screen.getByLabelText(labels.displayOptions));
 
     expect(screen.getByText(labels.orderDate)).toBeInTheDocument();
     fireEvent.click(screen.getByText(labels.orderTopo));
@@ -189,7 +189,7 @@ describe("GitGraphToolbar commit ordering", () => {
   it("marks the active order so the current choice is visible", () => {
     renderToolbar({ commitOrder: "topo" });
 
-    fireEvent.click(screen.getByTitle(labels.displayOptions));
+    fireEvent.click(screen.getByLabelText(labels.displayOptions));
 
     expect(screen.getByRole("radio", { name: labels.orderTopo })).toBeChecked();
     expect(screen.getByRole("radio", { name: labels.orderDate })).not.toBeChecked();
@@ -198,7 +198,7 @@ describe("GitGraphToolbar commit ordering", () => {
   it("groups the order options as a labelled radiogroup for screen readers", () => {
     renderToolbar({ commitOrder: "date" });
 
-    fireEvent.click(screen.getByTitle(labels.displayOptions));
+    fireEvent.click(screen.getByLabelText(labels.displayOptions));
 
     const group = screen.getByRole("radiogroup", { name: labels.commitOrder });
     expect(within(group).getAllByRole("radio")).toHaveLength(2);
@@ -207,7 +207,7 @@ describe("GitGraphToolbar commit ordering", () => {
   it("changes the order from the overflow menu (compact)", () => {
     const props = renderToolbar({ commitOrder: "date" });
     setToolbarWidth(360);
-    fireEvent.click(screen.getByTitle(labels.more));
+    fireEvent.click(screen.getByLabelText(labels.more));
 
     fireEvent.click(screen.getByText(labels.orderTopo));
     expect(props.onChangeOrder).toHaveBeenCalledWith("topo");
