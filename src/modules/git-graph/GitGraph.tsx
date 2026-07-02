@@ -226,7 +226,10 @@ export function GitGraph({
                     height: `${ROW_HEIGHT}px`,
                     top: `${layout.y - ROW_HEIGHT / 2}px`,
                   }}
-                  className={`absolute left-[100px] right-4 flex cursor-pointer items-center justify-between rounded border px-3 py-1 transition-all ${rowState}`}
+                  // Spans the full width (including the lane gutter) so a
+                  // click beside the node dot still opens the commit; the
+                  // text content stays where left-[100px] used to put it.
+                  className={`absolute left-0 right-4 flex cursor-pointer items-center justify-between rounded border py-1 pl-[112px] pr-3 transition-all ${rowState}`}
                 >
                   <div className="flex items-center space-x-3 overflow-hidden pr-2">
                     <span className="select-all font-mono text-xs font-semibold text-accent">
