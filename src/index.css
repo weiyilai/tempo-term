@@ -260,6 +260,16 @@ textarea:focus-visible,
   content: "−";
   color: var(--color-danger);
 }
+/* Collapsed unchanged regions: a quiet, clickable divider bar. */
+.diff-merge-view .cm-collapsedLines {
+  background: var(--color-bg-elevated);
+  color: var(--color-fg-subtle);
+  border-top: 1px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  padding: 3px 12px;
+  cursor: pointer;
+}
+.diff-merge-view .cm-collapsedLines:hover { color: var(--color-fg); }
 
 .note-md strong { font-weight: 700; }
 .note-md em { font-style: italic; }

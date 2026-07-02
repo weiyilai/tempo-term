@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronDown, ChevronUp, WrapText } from "lucide-react";
-import { goToNextChunk, goToPreviousChunk, MergeView } from "@codemirror/merge";
+import { getChunks, goToNextChunk, goToPreviousChunk, MergeView } from "@codemirror/merge";
 import { EditorState } from "@codemirror/state";
 import { EditorView, lineNumbers } from "@codemirror/view";
 import { Tooltip } from "@/components/Tooltip";
@@ -45,6 +45,8 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
   const [docs, setDocs] = useState<DiffDocs | null>(null);
   const [error, setError] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  // 1-based position of the chunk the cursor sits in (0 = before the first).
+  const [chunkPos, setChunkPos] = useState({ current: 0, total: 0 });
 
   // Re-read both sides when the window regains focus (e.g. after staging or
   // editing elsewhere); cheap enough that no file watcher is needed.
@@ -102,6 +104,8 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
       const extensions = [
         EditorState.readOnly.of(true),
         EditorView.editable.of(false),
+        // Localizes the collapsed-region bar ("$ unchanged lines").
+        EditorState.phrases.of({ "$ unchanged lines": t("diffUnchangedLines") }),
         editorSyntaxTheme(themeId),
         // Fixed 13px to match the Git Graph diff view's type size. Height and
         // scrolling belong to the outer .cm-mergeView container (the merge
@@ -119,8 +123,12 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
         b: { doc: docs.right, extensions },
         parent,
         gutter: true,
+        // Collapse long unchanged stretches into an expandable bar (VS Code
+        // style), so a large file reads as just its changes.
+        collapseUnchanged: { margin: 3, minSize: 5 },
       });
       mergeViewRef.current = view;
+      setChunkPos({ current: 0, total: getChunks(view.b.state)?.chunks.length ?? 0 });
     });
     return () => {
       cancelled = true;
@@ -129,7 +137,9 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
     };
   }, [docs, path, themeId, fontFamily, wordWrap]);
 
-  // Jump the selection (and scroll) to the previous/next changed chunk.
+  // Jump the selection to the previous/next changed chunk, pin the target to
+  // the top of the view (the default lands it at the bottom edge, easy to
+  // miss), and update the "current/total" indicator.
   function goToChunk(direction: "prev" | "next") {
     const view = mergeViewRef.current;
     if (!view) {
@@ -137,6 +147,26 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
     }
     const command = direction === "next" ? goToNextChunk : goToPreviousChunk;
     command(view.b);
+    const head = view.b.state.selection.main.head;
+    // The real scroll container is the outer .cm-mergeView (not the editors'
+    // own scrollers), so pin the target line to its top by hand once the
+    // command's own scrolling has settled.
+    requestAnimationFrame(() => {
+      const coords = view.b.coordsAtPos(head);
+      const scroller = containerRef.current?.querySelector(".cm-mergeView");
+      if (coords && scroller) {
+        const rect = scroller.getBoundingClientRect();
+        scroller.scrollTop += coords.top - rect.top - 8;
+      }
+    });
+    const chunks = getChunks(view.b.state)?.chunks ?? [];
+    let current = 0;
+    for (let i = 0; i < chunks.length; i++) {
+      if (head >= chunks[i].fromB) {
+        current = i + 1;
+      }
+    }
+    setChunkPos({ current, total: chunks.length });
   }
 
   const name = path.split(/[\\/]/).pop() ?? path;
@@ -144,11 +174,19 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
   return (
     <div className="flex h-full flex-col bg-bg">
       <div className="flex h-8 shrink-0 items-center gap-2 border-b border-border px-3">
+        {/* The controls sit at the end of the left half — the visual middle of
+            the two panes — where they are easy to spot. */}
+        <div className="flex w-1/2 items-center gap-2">
         <span className="min-w-0 truncate text-xs text-fg-muted">{name}</span>
         <span className="shrink-0 rounded bg-bg-elevated px-1.5 py-0.5 text-[10px] font-medium uppercase text-fg-subtle">
           {staged ? t("diffStaged") : t("diffUnstaged")}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          {chunkPos.total > 0 && (
+            <span className="mr-1 font-mono text-[11px] text-fg-subtle">
+              {chunkPos.current}/{chunkPos.total}
+            </span>
+          )}
           <Tooltip label={t("diffPrevChange")}>
             <button
               type="button"
@@ -184,6 +222,7 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
               <WrapText size={14} />
             </button>
           </Tooltip>
+        </div>
         </div>
       </div>
       {error ? (

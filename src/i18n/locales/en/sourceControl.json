@@ -40,5 +40,6 @@
   "menuCopyMessage": "Copy Message",
   "discardFailed": "Couldn't discard changes to {{name}}. The file may be locked or the repository is in an unexpected state.",
   "diffPrevChange": "Previous Change",
-  "diffNextChange": "Next Change"
+  "diffNextChange": "Next Change",
+  "diffUnchangedLines": "$ unchanged lines"
 }
