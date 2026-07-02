@@ -40,6 +40,14 @@ TempoTerm is a desktop app built on Tauri 2 + Rust and React 19. It pairs a nati
 - Standard editing shortcuts that carry over from other terminals: Shift+Enter, word and line navigation, delete to line start/end, copy and paste
 - Unicode 11 width tables so full-width CJK glyphs stay aligned
 
+### Split panes
+
+Any pane in any tab can be split four ways: click a sidebar item to auto-split, drag a file or note onto a pane, use the right-click menu, or drag onto the tab bar for a brand-new tab
+
+| **Click to split**<br>Click a file or note in the explorer or notes sidebar; it splits straight into the active tab<br>![Click to split](screenshots/split-click.gif) | **Drag onto a pane**<br>Drag a file or note onto any pane; where you drop it decides the split direction<br>![Drag onto a pane](screenshots/split-drag.gif) |
+| --- | --- |
+| **Right-click menu**<br>Open in a new tab, or split into a pane, straight from the right-click menu<br>![Right-click menu](screenshots/split-context-menu.gif) | **Drag onto the tab bar**<br>Drop a file, note or SSH connection onto the tab bar to open a brand-new tab<br>![Drag onto the tab bar](screenshots/split-tab-drop.gif) |
+
 ### Editor
 
 - CodeMirror 6 with syntax highlighting
