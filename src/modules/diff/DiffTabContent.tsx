@@ -97,7 +97,11 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
     }
     let view: MergeView | null = null;
     let cancelled = false;
-    void loadLanguageExtension(path).then((language) => {
+    // A failed grammar load falls back to plain text instead of leaving the
+    // tab stuck without a MergeView.
+    void loadLanguageExtension(path)
+      .catch(() => [])
+      .then((language) => {
       if (cancelled) {
         return;
       }
@@ -167,14 +171,12 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
     if (chunks.length === 0) {
       return;
     }
-    setChunkPos(({ current }) => {
-      const next =
-        direction === "next"
-          ? Math.min(current + 1, chunks.length)
-          : Math.max(current - 1, 1);
-      scrollToChunk(view, chunks[next - 1]);
-      return { current: next, total: chunks.length };
-    });
+    const next =
+      direction === "next"
+        ? Math.min(chunkPos.current + 1, chunks.length)
+        : Math.max(chunkPos.current - 1, 1);
+    scrollToChunk(view, chunks[next - 1]);
+    setChunkPos({ current: next, total: chunks.length });
   }
 
   const name = path.split(/[\\/]/).pop() ?? path;
