@@ -30,6 +30,9 @@ const GitGraphTabContent = lazy(() =>
     default: m.GitGraphTabContent,
   })),
 );
+const DiffTabContent = lazy(() =>
+  import("@/modules/diff/DiffTabContent").then((m) => ({ default: m.DiffTabContent })),
+);
 import { LauncherPanel } from "@/components/LauncherPanel";
 import { dropOverlayClassName, outerBandOverlayClassName } from "@/components/EntryDropOverlay";
 import { InfoDialog } from "@/components/InfoDialog";
@@ -450,6 +453,8 @@ export function PaneTabContent({ tab }: { tab: Tab }) {
                   />
                 ) : pane.content.kind === "git-graph" ? (
                   <GitGraphTabContent />
+                ) : pane.content.kind === "diff" ? (
+                  <DiffTabContent path={pane.content.path} staged={pane.content.staged} />
                 ) : pane.content.kind === "launcher" ? (
                   <LauncherPanel
                     target={{ mode: "replacePane", tabId: tab.id, leafId: pane.id }}

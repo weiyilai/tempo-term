@@ -22,5 +22,8 @@
   "generating": "Generating…",
   "refresh": "Refresh",
   "history": "Recent commits",
-  "nothingToCommit": "Stage changes and write a message to commit"
+  "nothingToCommit": "Stage changes and write a message to commit",
+  "diffStaged": "Staged",
+  "diffUnstaged": "Working tree",
+  "diffLoadError": "Couldn't load the comparison"
 }
