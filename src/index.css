@@ -208,31 +208,37 @@ textarea:focus-visible,
   padding: 4px 8px;
   box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
-/* Diff tab (@codemirror/merge): VS Code-style markers instead of the
-   library's underline gradients — full-line tints, solid word-level blocks,
-   and a bold gutter color bar per changed line. merge-a = old side (red),
-   merge-b = new side (green). */
+/* Diff tab (@codemirror/merge): match the Git Graph diff's look — the same
+   success/danger semantic tokens for full-line tints, solid word-level
+   blocks, and a bold gutter color bar per changed line. merge-a = old side
+   (danger), merge-b = new side (success). */
 .diff-merge-view .cm-mergeView { height: 100%; }
 .diff-merge-view .cm-mergeViewEditors { height: 100%; }
-.diff-merge-view .cm-merge-a .cm-changedLine { background: rgba(229, 83, 75, 0.1); }
-.diff-merge-view .cm-merge-b .cm-changedLine { background: rgba(81, 166, 90, 0.12); }
+.diff-merge-view .cm-merge-a .cm-changedLine {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
+.diff-merge-view .cm-merge-b .cm-changedLine {
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
+}
 .diff-merge-view .cm-merge-a .cm-changedText {
-  background: rgba(229, 83, 75, 0.32);
+  background: color-mix(in srgb, var(--color-danger) 32%, transparent);
   border-radius: 2px;
 }
 .diff-merge-view .cm-merge-b .cm-changedText {
-  background: rgba(81, 166, 90, 0.34);
+  background: color-mix(in srgb, var(--color-success) 32%, transparent);
   border-radius: 2px;
 }
-.diff-merge-view .cm-deletedChunk { background: rgba(229, 83, 75, 0.1); }
+.diff-merge-view .cm-deletedChunk {
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+}
 .diff-merge-view .cm-deletedChunk .cm-deletedText {
-  background: rgba(229, 83, 75, 0.32);
+  background: color-mix(in srgb, var(--color-danger) 32%, transparent);
   border-radius: 2px;
 }
 .diff-merge-view .cm-changeGutter { width: 4px; }
-.diff-merge-view .cm-merge-a .cm-changedLineGutter { background: #e5534b; }
-.diff-merge-view .cm-merge-b .cm-changedLineGutter { background: #51a65a; }
-.diff-merge-view .cm-deletedLineGutter { background: #e5534b; }
+.diff-merge-view .cm-merge-a .cm-changedLineGutter { background: var(--color-danger); }
+.diff-merge-view .cm-merge-b .cm-changedLineGutter { background: var(--color-success); }
+.diff-merge-view .cm-deletedLineGutter { background: var(--color-danger); }
 
 .note-md strong { font-weight: 700; }
 .note-md em { font-style: italic; }

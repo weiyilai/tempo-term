@@ -34,7 +34,6 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
   const { t } = useTranslation("sourceControl");
   const containerRef = useRef<HTMLDivElement>(null);
   const fontFamily = useFontStore(selectTerminalFontFamily);
-  const fontSize = useFontStore((s) => s.fontSize);
   const themeId = useSettingsStore((s) => s.themeId);
   const [docs, setDocs] = useState<DiffDocs | null>(null);
   const [error, setError] = useState(false);
@@ -97,8 +96,9 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
         EditorState.readOnly.of(true),
         EditorView.editable.of(false),
         editorSyntaxTheme(themeId),
+        // Fixed 13px to match the Git Graph diff view's type size.
         EditorView.theme({
-          "&": { fontSize: `${fontSize}px` },
+          "&": { fontSize: "13px" },
           ".cm-content, .cm-gutters, .cm-scroller": { fontFamily },
         }),
         ...language,
@@ -114,7 +114,7 @@ export function DiffTabContent({ path, staged }: DiffTabContentProps) {
       cancelled = true;
       view?.destroy();
     };
-  }, [docs, path, themeId, fontSize, fontFamily]);
+  }, [docs, path, themeId, fontFamily]);
 
   const name = path.split(/[\\/]/).pop() ?? path;
 
