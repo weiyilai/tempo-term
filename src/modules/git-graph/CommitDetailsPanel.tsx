@@ -157,9 +157,7 @@ function DetailsTreeRows({
 export function CommitDetailsPanel({ repo, selection, onClose, labels }: CommitDetailsPanelProps) {
   const isCompare = selection.mode === "compare";
   // Non-null only in single mode; used for the author/date/message block and
-  // the AI-explain tab, both of which only make sense for one commit. Safe to
-  // assert `!` where used below because both are unreachable while isCompare
-  // is true (the AI tab button that would flip `tab` to "ai" isn't rendered).
+  // the AI-explain tab, both of which only make sense for one commit.
   const singleCommit = selection.mode === "single" ? selection.commit : null;
   const rangeKey =
     selection.mode === "single" ? selection.commit.hash : `${selection.from.hash}..${selection.to.hash}`;
@@ -171,6 +169,11 @@ export function CommitDetailsPanel({ repo, selection, onClose, labels }: CommitD
   const [error, setError] = useState<string | null>(null);
   const [diffText, setDiffText] = useState("");
   const [tab, setTab] = useState<"diff" | "ai">("diff");
+  // `tab` is state, so it can still read "ai" on the render where `selection`
+  // just flipped to compare mode (the effect that resets it to "diff" hasn't
+  // run yet). Fall back to "diff" here so the content below never tries to
+  // render the AI tab (and dereference `singleCommit`) while isCompare.
+  const activeTab = isCompare ? "diff" : tab;
   const [filesViewMode, setFilesViewMode] = useState<FilesViewMode>("flat");
   const {
     collapsed: collapsedFolders,
@@ -422,7 +425,7 @@ export function CommitDetailsPanel({ repo, selection, onClose, labels }: CommitD
                 )}
               </div>
               <div className="min-h-0 flex-1">
-                {tab === "diff" ? (
+                {activeTab === "diff" ? (
                   <DiffView lines={diffLines} emptyLabel={labels.noDiff} />
                 ) : (
                   <DiffExplain

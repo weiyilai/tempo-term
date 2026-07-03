@@ -160,4 +160,36 @@ describe("CommitDetailsPanel compare mode", () => {
     await screen.findByText("a.ts");
     expect(screen.queryByRole("button", { name: "AI Explain" })).not.toBeInTheDocument();
   });
+
+  it("does not crash when the selection flips to compare mode while the AI tab is active", async () => {
+    vi.mocked(gitCommitDetails).mockResolvedValue({
+      message: "feat: x",
+      files: [{ status: "M", path: "a.ts" }],
+    });
+    vi.mocked(gitCommitRangeFiles).mockResolvedValue([{ status: "M", path: "a.ts" }]);
+
+    const { rerender } = render(
+      <CommitDetailsPanel
+        repo="/repo"
+        selection={{ mode: "single", commit: COMMIT }}
+        onClose={() => {}}
+        labels={LABELS}
+      />,
+    );
+    await screen.findByText("a.ts");
+    fireEvent.click(screen.getByRole("button", { name: "AI Explain" }));
+    await screen.findByText("Empty");
+
+    rerender(
+      <CommitDetailsPanel
+        repo="/repo"
+        selection={{ mode: "compare", from: OTHER, to: COMMIT }}
+        onClose={() => {}}
+        labels={LABELS}
+      />,
+    );
+
+    expect(await screen.findByText("No diff")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "AI Explain" })).not.toBeInTheDocument();
+  });
 });
