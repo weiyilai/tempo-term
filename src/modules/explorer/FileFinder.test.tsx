@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { FileFinder } from "./FileFinder";
 import { useTabsStore } from "@/stores/tabsStore";
@@ -49,6 +49,10 @@ describe("FileFinder keyboard navigation", () => {
     useTabsStore.setState({ tabs: [], activeId: null, spaces: [], activeSpaceId: null });
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("moves the active selection down with ArrowDown and opens it on Enter", async () => {
     render(<FileFinder root="/p" onClose={() => {}} />);
     await waitFor(() => screen.getByText("util.ts"));
@@ -90,6 +94,45 @@ describe("FileFinder keyboard navigation", () => {
     fireEvent.keyDown(input, { key: "Enter", isComposing: true });
 
     expect(useTabsStore.getState().tabs).toHaveLength(0);
+  });
+
+  it("does not steal the active selection when the list scrolls under a stationary cursor", async () => {
+    // A plain mouseenter fires when the row scrolls under an unmoving
+    // pointer (e.g. keyboard-driven scrolling), which would otherwise fight
+    // with ArrowDown/ArrowUp. Only an actual mouse move should reclaim
+    // selection from the keyboard.
+    render(<FileFinder root="/p" onClose={() => {}} />);
+    await waitFor(() => screen.getByText("util.ts"));
+
+    const input = screen.getByLabelText("findFiles");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.mouseEnter(screen.getByText("main.ts"));
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const tabs = useTabsStore.getState().tabs;
+    const pane = tabs[0].paneTree;
+    expect(pane.kind === "leaf" && pane.pane).toMatchObject({
+      kind: "editor",
+      path: "/p/util.ts",
+    });
+  });
+
+  it("re-scrolls the active row into view when the result set changes even if the index stays the same", async () => {
+    // The active index resets to 0 on every keystroke, so a query change
+    // that keeps it at 0 must still re-scroll — otherwise a list the user
+    // had wheel-scrolled away from the top stays scrolled after filtering.
+    const scrollSpy = vi
+      .spyOn(HTMLElement.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+    render(<FileFinder root="/p" onClose={() => {}} />);
+    await waitFor(() => screen.getByText("util.ts"));
+    const callsAfterMount = scrollSpy.mock.calls.length;
+
+    const input = screen.getByLabelText("findFiles");
+    fireEvent.change(input, { target: { value: "u" } });
+    await waitFor(() => screen.getByText("util.ts"));
+
+    expect(scrollSpy.mock.calls.length).toBeGreaterThan(callsAfterMount);
   });
 });
 

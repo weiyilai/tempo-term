@@ -20,18 +20,29 @@ const SEPARATORS = "/\\_-. ";
  * fail once the query had more than one word in it.
  */
 export function fuzzyMatch(query: string, target: string): FuzzyResult {
-  const words = query.trim().split(/\s+/).filter(Boolean);
+  return matchWords(parseQueryWords(query), target);
+}
+
+/**
+ * Lowercased, whitespace-split query words. `fuzzyRank` calls this once per
+ * keystroke and reuses the result across every candidate item, rather than
+ * re-parsing (and re-lowercasing) the same query once per item.
+ */
+function parseQueryWords(query: string): string[] {
+  return query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+/** Matches a target against pre-parsed (already-lowercased) query words. */
+function matchWords(words: string[], target: string): FuzzyResult {
   if (words.length === 0) {
     return { matched: true, score: 0, indices: [] };
   }
 
-  // Lowercase the target once and reuse it across words, rather than
-  // redoing it per word for the same target.
   const t = target.toLowerCase();
   let score = 0;
   const indices = new Set<number>();
   for (const word of words) {
-    const result = matchWord(word, target, t);
+    const result = matchWord(word, t);
     if (!result.matched) {
       return { matched: false, score: 0, indices: [] };
     }
@@ -43,9 +54,8 @@ export function fuzzyMatch(query: string, target: string): FuzzyResult {
   return { matched: true, score, indices: [...indices].sort((a, b) => a - b) };
 }
 
-/** Matches a single word (no whitespace) as a subsequence of `t`, the already-lowercased `target`. */
-function matchWord(query: string, target: string, t: string): FuzzyResult {
-  const q = query.toLowerCase();
+/** Matches a single already-lowercased word as a subsequence of `t`, the already-lowercased target. */
+function matchWord(q: string, t: string): FuzzyResult {
   const indices: number[] = [];
   let qi = 0;
   let score = 0;
@@ -74,7 +84,7 @@ function matchWord(query: string, target: string, t: string): FuzzyResult {
   }
 
   // Slightly prefer shorter targets.
-  score -= Math.floor(target.length / 24);
+  score -= Math.floor(t.length / 24);
   return { matched: true, score, indices };
 }
 
@@ -86,8 +96,9 @@ export function fuzzyRank(query: string, items: string[]): string[] {
   if (query === "") {
     return [...items];
   }
+  const words = parseQueryWords(query);
   return items
-    .map((item) => ({ item, result: fuzzyMatch(query, item) }))
+    .map((item) => ({ item, result: matchWords(words, item) }))
     .filter((entry) => entry.result.matched)
     .sort(
       (a, b) =>

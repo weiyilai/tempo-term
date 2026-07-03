@@ -49,7 +49,11 @@ export function FileFinder({ root, onClose }: FileFinderProps) {
 
   useEffect(() => {
     activeResultRef.current?.scrollIntoView({ block: "nearest" });
-  }, [activeIndex]);
+    // A query change can leave activeIndex at the same value (still 0) while
+    // the list itself re-filters, e.g. after the user wheel-scrolled away
+    // from the top — results must stay in the dependency list so that case
+    // still re-scrolls back to the active row.
+  }, [activeIndex, results]);
 
   function open(path: string) {
     const result = openFromSidebar({ kind: "editor", path });
@@ -113,7 +117,10 @@ export function FileFinder({ root, onClose }: FileFinderProps) {
                       ref={active ? activeResultRef : undefined}
                       type="button"
                       onClick={() => open(path)}
-                      onMouseEnter={() => setActiveIndex(index)}
+                      // mousemove, not mouseenter: keyboard-driven scrolling
+                      // can slide a row under a stationary cursor, and a plain
+                      // enter there would steal the selection from the keyboard.
+                      onMouseMove={() => setActiveIndex(index)}
                       aria-selected={active}
                       className={`block w-full truncate px-3 py-1.5 text-left text-sm ${
                         active ? "bg-bg text-fg" : "text-fg-muted hover:bg-bg hover:text-fg"
