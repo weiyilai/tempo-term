@@ -7,6 +7,7 @@
   "expandAll": "全部展開",
   "collapseAll": "全部收合",
   "findPlaceholder": "輸入以模糊搜尋檔案",
+  "recentlyOpened": "最近開啟的",
   "searchInFiles": "在檔案中搜尋",
   "searchPlaceholder": "搜尋檔案內的文字",
   "noResults": "沒有符合的結果",

@@ -12,19 +12,25 @@ beforeEach(() => {
 });
 
 describe("ExplorerView remote root", () => {
-  it("hides the open-folder and find buttons and shows the remote path", () => {
+  it("hides the open-folder button and shows the remote path", () => {
     useWorkspaceStore.setState({ rootPath: "ssh://c1/home/me" });
     render(<ExplorerView />);
     expect(screen.queryByLabelText("Open folder")).toBeNull();
-    expect(screen.queryByLabelText("Find files")).toBeNull();
     expect(screen.getByText("/home/me")).toBeInTheDocument();
   });
 
-  it("keeps the buttons for a local root", () => {
+  it("keeps the open-folder button for a local root", () => {
     useWorkspaceStore.setState({ rootPath: "/home/me" });
     render(<ExplorerView />);
     expect(screen.getByLabelText("Open folder")).toBeInTheDocument();
-    expect(screen.getByLabelText("Find files")).toBeInTheDocument();
+  });
+
+  // The fuzzy file search moved to a global header trigger (Cmd/Ctrl+P) — see
+  // TabBar.test.tsx — so it is no longer embedded in this sidebar panel.
+  it("no longer renders a Find files button here", () => {
+    useWorkspaceStore.setState({ rootPath: "/home/me" });
+    render(<ExplorerView />);
+    expect(screen.queryByLabelText("Find files")).toBeNull();
   });
 });
 

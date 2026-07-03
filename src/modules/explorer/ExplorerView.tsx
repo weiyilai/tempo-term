@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronsDownUp, ChevronsUpDown, FolderOpen, Search } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, FolderOpen } from "lucide-react";
 import { FileTree } from "./FileTree";
-import { FileFinder } from "./FileFinder";
 import { Tooltip } from "@/components/Tooltip";
 import { fsReadDir, type DirEntry } from "./lib/fsBridge";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
-import { useUiStore } from "@/stores/uiStore";
 import { pickFolder } from "@/lib/dialog";
 import { isRemoteUri, parseRemoteUri } from "@/modules/ssh/lib/remotePath";
 
@@ -14,8 +12,6 @@ export function ExplorerView() {
   const { t } = useTranslation("explorer");
   const rootPath = useWorkspaceStore((s) => s.rootPath);
   const setRoot = useWorkspaceStore((s) => s.setRoot);
-  const finderOpen = useUiStore((s) => s.fileFinderOpen);
-  const setFinderOpen = useUiStore((s) => s.setFileFinderOpen);
   const [entries, setEntries] = useState<DirEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [collapseSignal, setCollapseSignal] = useState(0);
@@ -87,28 +83,16 @@ export function ExplorerView() {
         </span>
         <div className="flex items-center gap-0.5">
           {!remote && (
-            <>
-              <Tooltip label={t("openFolder")}>
-                <button
-                  type="button"
-                  aria-label={t("openFolder")}
-                  onClick={() => void openFolder()}
-                  className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-                >
-                  <FolderOpen size={15} />
-                </button>
-              </Tooltip>
-              <Tooltip label={t("findFiles")}>
-                <button
-                  type="button"
-                  aria-label={t("findFiles")}
-                  onClick={() => setFinderOpen(true)}
-                  className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-                >
-                  <Search size={15} />
-                </button>
-              </Tooltip>
-            </>
+            <Tooltip label={t("openFolder")}>
+              <button
+                type="button"
+                aria-label={t("openFolder")}
+                onClick={() => void openFolder()}
+                className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+              >
+                <FolderOpen size={15} />
+              </button>
+            </Tooltip>
           )}
           {rootPath && (
             <Tooltip label={treeExpanded ? t("collapseAll") : t("expandAll")}>
@@ -147,10 +131,6 @@ export function ExplorerView() {
           />
         )}
       </div>
-
-      {finderOpen && rootPath && !remote && (
-        <FileFinder root={rootPath} onClose={() => setFinderOpen(false)} />
-      )}
     </div>
   );
 }

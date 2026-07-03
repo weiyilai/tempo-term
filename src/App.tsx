@@ -23,6 +23,8 @@ import { pruneTerminalHistory } from "@/modules/terminal/lib/terminalHistory";
 import { findPaneContent, leafIds } from "@/modules/terminal/lib/terminalLayout";
 import { getPreviewControls } from "@/modules/preview/lib/previewControls";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { FileFinder } from "@/modules/explorer/FileFinder";
+import { canSearchRoot } from "@/modules/explorer/lib/fsBridge";
 import { applyTheme, getTheme } from "@/themes/themes";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
@@ -120,8 +122,21 @@ function App() {
   const uiZoom = useSettingsStore((s) => s.uiZoom);
   const sidebarVisible = useUiStore((s) => s.sidebarVisible);
   const settingsOpen = useUiStore((s) => s.settingsOpen);
+  const fileFinderOpen = useUiStore((s) => s.fileFinderOpen);
+  const setFileFinderOpen = useUiStore((s) => s.setFileFinderOpen);
+  const rootPath = useWorkspaceStore((s) => s.rootPath);
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [pendingCloseAction, setPendingCloseAction] = useState<(() => void) | null>(null);
+
+  // Cmd/Ctrl+P with no open folder (or a remote one) sets fileFinderOpen with
+  // nowhere to render it — left alone, that flag would survive until the user
+  // later opens a searchable folder and the palette would pop up unprompted.
+  // Clear it as soon as it stops having anywhere to render.
+  useEffect(() => {
+    if (fileFinderOpen && !canSearchRoot(rootPath)) {
+      setFileFinderOpen(false);
+    }
+  }, [fileFinderOpen, rootPath, setFileFinderOpen]);
 
   // Close the focused pane, or the whole tab when it holds a single pane. Shared
   // by the ⌘W key handler and the "Close Tab" menu item (both must behave the
@@ -435,6 +450,9 @@ function App() {
 
       <StatusBar />
       {settingsOpen && <SettingsModal />}
+      {fileFinderOpen && canSearchRoot(rootPath) && (
+        <FileFinder root={rootPath} onClose={() => setFileFinderOpen(false)} />
+      )}
       <UpdateModal />
       <UpdateToast />
       <NotifyToast />

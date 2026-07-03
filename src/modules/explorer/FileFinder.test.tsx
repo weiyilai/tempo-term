@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { FileFinder } from "./FileFinder";
 import { useTabsStore } from "@/stores/tabsStore";
+import { useRecentFilesStore } from "./lib/recentFiles";
 
 vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -10,6 +11,12 @@ vi.mock("react-i18next", () => ({
 vi.mock("./lib/fsBridge", () => ({
   fsListFiles: vi.fn(() => Promise.resolve(["/p/main.ts", "/p/util.ts"])),
 }));
+
+// The recent-files store is a persisted singleton, so a path opened in one
+// test would otherwise leak into the next test's "empty query" list.
+beforeEach(() => {
+  useRecentFilesStore.setState({ paths: [] });
+});
 
 describe("FileFinder opening a file", () => {
   beforeEach(() => {
@@ -152,5 +159,96 @@ describe("FileFinder at pane capacity", () => {
     fireEvent.click(screen.getByText("main.ts"));
 
     expect(screen.getByText("paneCapacityAlert")).toBeInTheDocument();
+  });
+
+  it("dismissing the InfoDialog does not also close the search palette underneath it", async () => {
+    const onClose = vi.fn();
+    useTabsStore.getState().openEditorTab("/0.ts");
+    for (let i = 1; i < 8; i++) {
+      useTabsStore.getState().openFromSidebar({ kind: "editor", path: `/${i}.ts` });
+    }
+    render(<FileFinder root="/p" onClose={onClose} />);
+    await waitFor(() => screen.getByText("main.ts"));
+
+    fireEvent.click(screen.getByText("main.ts"));
+    expect(screen.getByText("paneCapacityAlert")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("actions.confirm"));
+
+    expect(screen.queryByText("paneCapacityAlert")).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("FileFinder recently opened files", () => {
+  beforeEach(() => {
+    useTabsStore.setState({ tabs: [], activeId: null, spaces: [], activeSpaceId: null });
+  });
+
+  it("records the opened path so it appears as a recent file next time", async () => {
+    render(<FileFinder root="/p" onClose={() => {}} />);
+    await waitFor(() => screen.getByText("main.ts"));
+
+    fireEvent.click(screen.getByText("main.ts"));
+
+    expect(useRecentFilesStore.getState().paths).toEqual(["/p/main.ts"]);
+  });
+
+  it("shows a recently-opened section before the default listing once a file has been opened", async () => {
+    useRecentFilesStore.setState({ paths: ["/p/util.ts"] });
+    render(<FileFinder root="/p" onClose={() => {}} />);
+
+    await waitFor(() => screen.getByText("recentlyOpened"));
+    expect(screen.getByText("util.ts")).toBeInTheDocument();
+  });
+
+  it("does not show a recently-opened header when nothing has been opened yet", async () => {
+    render(<FileFinder root="/p" onClose={() => {}} />);
+    await waitFor(() => screen.getByText("main.ts"));
+
+    expect(screen.queryByText("recentlyOpened")).toBeNull();
+  });
+
+  it("ignores a recent path that no longer exists in the workspace file list", async () => {
+    useRecentFilesStore.setState({ paths: ["/p/deleted.ts"] });
+    render(<FileFinder root="/p" onClose={() => {}} />);
+
+    await waitFor(() => screen.getByText("main.ts"));
+    expect(screen.queryByText("recentlyOpened")).toBeNull();
+  });
+});
+
+describe("FileFinder result rows", () => {
+  beforeEach(() => {
+    useTabsStore.setState({ tabs: [], activeId: null, spaces: [], activeSpaceId: null });
+  });
+
+  it("shows the containing folder next to a nested file's name", async () => {
+    const { fsListFiles } = await import("./lib/fsBridge");
+    vi.mocked(fsListFiles).mockResolvedValueOnce(["/p/src/modules/util.ts"]);
+
+    render(<FileFinder root="/p" onClose={() => {}} />);
+
+    await waitFor(() => screen.getByText("util.ts"));
+    expect(screen.getByText("src/modules")).toBeInTheDocument();
+  });
+
+  it("shows a loading state instead of 'no matches' while the file list is still loading", async () => {
+    const { fsListFiles } = await import("./lib/fsBridge");
+    let resolveList: (list: string[]) => void = () => {};
+    vi.mocked(fsListFiles).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveList = resolve;
+      }),
+    );
+
+    render(<FileFinder root="/p" onClose={() => {}} />);
+
+    expect(screen.getByText("loading")).toBeInTheDocument();
+    expect(screen.queryByText("noResults")).toBeNull();
+
+    resolveList(["/p/main.ts"]);
+    await waitFor(() => screen.getByText("main.ts"));
+    expect(screen.queryByText("loading")).toBeNull();
   });
 });

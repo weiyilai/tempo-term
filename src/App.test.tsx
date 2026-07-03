@@ -4,6 +4,7 @@ import App from "./App";
 import "./i18n";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUiStore } from "@/stores/uiStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useTabsStore } from "@/stores/tabsStore";
 import { leaf, splitLeaf, type LayoutNode } from "@/modules/terminal/lib/terminalLayout";
 
@@ -34,6 +35,7 @@ describe("App shell", () => {
       sidebarView: "explorer",
       fileFinderOpen: false,
     });
+    useWorkspaceStore.setState({ rootPath: null });
     // Start every test with no tabs so the default render mounts no terminal
     // panes (which need a Tauri runtime jsdom doesn't provide).
     useTabsStore.setState({ tabs: [], activeId: null, spaces: [], activeSpaceId: null });
@@ -191,5 +193,18 @@ describe("App shell", () => {
     expect(useUiStore.getState().sidebarView).toBe("explorer");
 
     input.remove();
+  });
+
+  it("clears a stale file-search flag left over from before a folder was opened", () => {
+    // Cmd/Ctrl+P pressed with no folder open (or a remote one) sets
+    // fileFinderOpen without anywhere to render it — if that flag survives
+    // until the user later opens a searchable folder, the palette would pop
+    // up unprompted. It must self-clear instead.
+    useWorkspaceStore.setState({ rootPath: null });
+    useUiStore.setState({ fileFinderOpen: true });
+
+    render(<App />);
+
+    expect(useUiStore.getState().fileFinderOpen).toBe(false);
   });
 });

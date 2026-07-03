@@ -17,7 +17,7 @@ vi.mock("@/modules/ssh/lib/sftp-bridge", () => ({
   sftpWriteFile: (...a: unknown[]) => sftpWriteFile(...a),
 }));
 
-import { fsReadDir, fsReadFile, fsWriteFile } from "./fsBridge";
+import { canSearchRoot, fsReadDir, fsReadFile, fsWriteFile } from "./fsBridge";
 
 beforeEach(() => {
   invoke.mockReset();
@@ -58,5 +58,19 @@ describe("fsBridge routing", () => {
     invoke.mockResolvedValue(undefined);
     await fsWriteFile("/a.txt", "x");
     expect(invoke).toHaveBeenCalledWith("fs_write_file", { path: "/a.txt", contents: "x" });
+  });
+});
+
+describe("canSearchRoot", () => {
+  it("allows a local root", () => {
+    expect(canSearchRoot("/home/me/project")).toBe(true);
+  });
+
+  it("rejects a remote (SFTP) root — fs_list_files only understands local paths", () => {
+    expect(canSearchRoot("ssh://c1/home/me")).toBe(false);
+  });
+
+  it("rejects no open folder", () => {
+    expect(canSearchRoot(null)).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { basename, dirname, joinPath, relativePath } from "./paths";
+import { basename, dirname, joinPath, relativeDirOf, relativePath } from "./paths";
 
 describe("basename", () => {
   it("returns the final segment", () => {
@@ -69,5 +69,19 @@ describe("relativePath", () => {
   it("does not treat a sibling with a shared prefix as inside the root", () => {
     // "/root-extra" must not be seen as living under "/root".
     expect(relativePath("/root-extra/file.ts", "/root")).toBe("/root-extra/file.ts");
+  });
+});
+
+describe("relativeDirOf", () => {
+  it("returns the parent segment of a nested relative path", () => {
+    expect(relativeDirOf("src/modules/explorer/FileFinder.tsx")).toBe("src/modules/explorer");
+  });
+
+  it("returns an empty string for a file at the root (no directory component)", () => {
+    expect(relativeDirOf("main.ts")).toBe("");
+  });
+
+  it("handles Windows separators", () => {
+    expect(relativeDirOf("src\\modules\\file.ts")).toBe("src\\modules");
   });
 });

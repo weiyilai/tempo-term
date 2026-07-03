@@ -25,7 +25,9 @@ interface UiState {
   setFileFinderOpen: (open: boolean) => void;
   setPortsPanelOpen: (open: boolean) => void;
   togglePortsPanel: () => void;
-  /** Reveal the explorer and open the fuzzy file finder (Cmd/Ctrl+P). */
+  /** Open the global fuzzy file search palette (Cmd/Ctrl+P). Independent of
+   *  the sidebar — it renders as a top-anchored overlay regardless of which
+   *  sidebar panel (if any) is currently showing. */
   openFileFinder: () => void;
   pushOverlay: () => void;
   popOverlay: () => void;
@@ -50,8 +52,7 @@ export const useUiStore = create<UiState>((set) => ({
   setPortsPanelOpen: (portsPanelOpen) => set({ portsPanelOpen }),
   togglePortsPanel: () => set((state) => ({ portsPanelOpen: !state.portsPanelOpen })),
 
-  openFileFinder: () =>
-    set({ sidebarView: "explorer", sidebarVisible: true, fileFinderOpen: true }),
+  openFileFinder: () => set({ fileFinderOpen: true }),
 
   pushOverlay: () => set((state) => ({ overlayCount: state.overlayCount + 1 })),
   popOverlay: () => set((state) => ({ overlayCount: Math.max(0, state.overlayCount - 1) })),
