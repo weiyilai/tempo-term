@@ -8,6 +8,8 @@ import { leaf } from "@/modules/terminal/lib/terminalLayout";
 import { useEntryDragStore } from "@/modules/explorer/lib/dragEntry";
 import { useNoteDragStore } from "@/modules/notes/lib/noteDrag";
 import { useSshDragStore } from "@/modules/ssh/lib/sshDrag";
+import { useUiStore } from "@/stores/uiStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 
 beforeEach(() => {
   useTabsStore.setState({
@@ -32,6 +34,33 @@ afterEach(() => {
   useEntryDragStore.setState({ tabBarHover: null });
   useNoteDragStore.setState({ tabBarHover: null });
   useSshDragStore.setState({ tabBarHover: null });
+  useWorkspaceStore.setState({ rootPath: null });
+});
+
+describe("TabBar global file search trigger", () => {
+  it("opens the global file search when a local folder is open", () => {
+    useWorkspaceStore.setState({ rootPath: "/home/me/project" });
+    useUiStore.setState({ fileFinderOpen: false });
+    render(<TabBar />);
+
+    fireEvent.click(screen.getByLabelText("Find files"));
+
+    expect(useUiStore.getState().fileFinderOpen).toBe(true);
+  });
+
+  it("disables the trigger when no folder is open", () => {
+    useWorkspaceStore.setState({ rootPath: null });
+    render(<TabBar />);
+
+    expect(screen.getByLabelText("Find files")).toBeDisabled();
+  });
+
+  it("disables the trigger for a remote (SSH) root", () => {
+    useWorkspaceStore.setState({ rootPath: "ssh://c1/home/me" });
+    render(<TabBar />);
+
+    expect(screen.getByLabelText("Find files")).toBeDisabled();
+  });
 });
 
 describe("TabBar close button tooltip", () => {

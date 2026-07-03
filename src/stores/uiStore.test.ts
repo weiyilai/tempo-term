@@ -13,6 +13,19 @@ describe("uiStore workspaces view", () => {
   });
 });
 
+describe("uiStore openFileFinder", () => {
+  it("opens the global file search without touching the sidebar", () => {
+    useUiStore.setState({ sidebarView: "notes", sidebarVisible: false, fileFinderOpen: false });
+
+    useUiStore.getState().openFileFinder();
+
+    const state = useUiStore.getState();
+    expect(state.fileFinderOpen).toBe(true);
+    expect(state.sidebarView).toBe("notes");
+    expect(state.sidebarVisible).toBe(false);
+  });
+});
+
 describe("uiStore overlay counter", () => {
   it("reports an overlay open while the count is positive", () => {
     expect(selectAnyOverlayOpen(useUiStore.getState())).toBe(false);

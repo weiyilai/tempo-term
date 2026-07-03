@@ -3,9 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import { fsListFiles } from "./lib/fsBridge";
 import { fuzzyRank } from "./lib/fuzzy";
-import { relativePath } from "./lib/paths";
+import { basename, relativeDirOf, relativePath } from "./lib/paths";
+import { useRecentFilesStore } from "./lib/recentFiles";
+import { FileIcon } from "./components/FileIcon";
 import { InfoDialog } from "@/components/InfoDialog";
-import { Tooltip } from "@/components/Tooltip";
+import { useOverlayGuard } from "@/lib/overlayGuard";
 import { useTabsStore } from "@/stores/tabsStore";
 
 interface FileFinderProps {
@@ -13,6 +15,13 @@ interface FileFinderProps {
   onClose: () => void;
 }
 
+/**
+ * Global fuzzy file search palette (Cmd/Ctrl+P), mounted at the app level so it
+ * opens over whatever the user is looking at rather than being scoped to the
+ * Explorer sidebar. Anchored near the top of the window and full-width (unlike
+ * the old sidebar-embedded version), so a matched file's full relative path is
+ * always visible without truncation or a hover tooltip.
+ */
 export function FileFinder({ root, onClose }: FileFinderProps) {
   const { t } = useTranslation("explorer");
   const { t: tCommon } = useTranslation("common");
@@ -23,6 +32,12 @@ export function FileFinder({ root, onClose }: FileFinderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const activeResultRef = useRef<HTMLButtonElement | null>(null);
   const openFromSidebar = useTabsStore((s) => s.openFromSidebar);
+  const recentPaths = useRecentFilesStore((s) => s.paths);
+  const addRecent = useRecentFilesStore((s) => s.addRecent);
+
+  // A full-screen overlay, so hide the native preview webview (which floats
+  // above all DOM) for as long as this is mounted.
+  useOverlayGuard(true);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -39,7 +54,23 @@ export function FileFinder({ root, onClose }: FileFinderProps) {
     };
   }, [root]);
 
-  const results = useMemo(() => fuzzyRank(query, files).slice(0, 50), [query, files]);
+  // A Set lookup keeps this O(files + recents) instead of O(files * recents) —
+  // `files` can hold up to 20,000 entries (see the fsListFiles call below).
+  const fileSet = useMemo(() => new Set(files), [files]);
+
+  // Recent picks still under this root, most-recently-opened first; a path
+  // that was deleted or belongs to a different workspace silently drops off
+  // since it no longer appears in `files`.
+  const recentResults = useMemo(
+    () => recentPaths.filter((path) => fileSet.has(path)),
+    [recentPaths, fileSet],
+  );
+  const showRecent = query === "" && recentResults.length > 0;
+
+  const results = useMemo(
+    () => (showRecent ? recentResults : fuzzyRank(query, files).slice(0, 50)),
+    [query, files, showRecent, recentResults],
+  );
 
   // The result set changes on every keystroke; keep the highlighted row
   // pinned to the top match instead of an index that now points elsewhere.
@@ -61,6 +92,7 @@ export function FileFinder({ root, onClose }: FileFinderProps) {
       setAtCapacity(true);
       return;
     }
+    addRecent(path);
     onClose();
   }
 
@@ -84,13 +116,22 @@ export function FileFinder({ root, onClose }: FileFinderProps) {
   }
 
   return (
-    <div className="absolute inset-0 z-20 flex justify-center bg-black/40 pt-16">
-      <div
-        className="h-fit w-[90%] max-w-lg overflow-hidden rounded-lg border border-border-strong bg-bg-elevated shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-          <Search size={15} className="text-fg-subtle" />
+    <div
+      className="fixed inset-0 z-[90] flex justify-center bg-black/40 pt-16"
+      // Clicking the dimmed area beside the panel dismisses it; clicks that
+      // originate inside the panel (or the at-capacity InfoDialog, which is a
+      // descendant of this wrapper too) bubble up here with a different
+      // target, so guard on currentTarget to leave those alone — otherwise
+      // dismissing the InfoDialog would also close this palette underneath it.
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          onClose();
+        }
+      }}
+    >
+      <div className="h-fit w-[70%] max-w-2xl overflow-hidden rounded-lg border border-border-strong bg-bg-elevated shadow-2xl">
+        <div className="flex items-center gap-2 border-b border-border px-3 py-2.5">
+          <Search size={16} className="shrink-0 text-fg-subtle" />
           <input
             ref={inputRef}
             value={query}
@@ -101,18 +142,26 @@ export function FileFinder({ root, onClose }: FileFinderProps) {
             className="w-full bg-transparent text-sm text-fg outline-none placeholder:text-fg-subtle"
           />
         </div>
-        <ul className="max-h-80 overflow-y-auto py-1">
+        <ul className="max-h-96 overflow-y-auto py-1">
           {results.length === 0 ? (
-            <li className="px-3 py-2 text-xs text-fg-subtle">
-              {t("noResults")}
-            </li>
+            <li className="px-3 py-2 text-xs text-fg-subtle">{t("noResults")}</li>
           ) : (
-            results.map((path, index) => {
-              const relative = relativePath(path, root);
-              const active = index === activeIndex;
-              return (
-                <li key={path}>
-                  <Tooltip label={relative} className="w-full">
+            <>
+              {showRecent && (
+                <li
+                  aria-hidden="true"
+                  className="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-fg-subtle"
+                >
+                  {t("recentlyOpened")}
+                </li>
+              )}
+              {results.map((path, index) => {
+                const relative = relativePath(path, root);
+                const name = basename(path);
+                const dir = relativeDirOf(relative);
+                const active = index === activeIndex;
+                return (
+                  <li key={path}>
                     <button
                       ref={active ? activeResultRef : undefined}
                       type="button"
@@ -122,20 +171,29 @@ export function FileFinder({ root, onClose }: FileFinderProps) {
                       // enter there would steal the selection from the keyboard.
                       onMouseMove={() => setActiveIndex(index)}
                       aria-selected={active}
-                      className={`block w-full truncate px-3 py-1.5 text-left text-sm ${
+                      className={`flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm ${
                         active ? "bg-bg text-fg" : "text-fg-muted hover:bg-bg hover:text-fg"
                       }`}
                     >
-                      {relative}
+                      <FileIcon name={name} isDir={false} />
+                      <span className="min-w-0 flex-1 truncate">{name}</span>
+                      {dir && (
+                        // Capped (rather than plain shrink-0) so a deeply nested path
+                        // truncates itself instead of squeezing the filename above —
+                        // the filename staying fully readable is the point of this
+                        // redesign, so it must win the remaining space.
+                        <span className="max-w-[40%] shrink-0 truncate text-xs text-fg-subtle">
+                          {dir}
+                        </span>
+                      )}
                     </button>
-                  </Tooltip>
-                </li>
-              );
-            })
+                  </li>
+                );
+              })}
+            </>
           )}
         </ul>
       </div>
-      <div className="absolute inset-0 -z-10" onClick={onClose} />
 
       {atCapacity && (
         <InfoDialog

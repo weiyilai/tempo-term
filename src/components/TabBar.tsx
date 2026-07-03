@@ -9,6 +9,7 @@ import {
   LayoutGrid,
   PanelLeft,
   Plus,
+  Search,
   SquareTerminal,
   X,
   type LucideIcon,
@@ -32,6 +33,7 @@ import { useTabsStore, type Tab } from "@/stores/tabsStore";
 import { Tooltip } from "@/components/Tooltip";
 import { useTabCloseRequest } from "./useTabCloseRequest";
 import { useUiStore } from "@/stores/uiStore";
+import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { IS_MAC } from "@/lib/platform";
 import { SpaceDropdown } from "./SpaceDropdown";
 import { ContextMenu } from "./ContextMenu";
@@ -39,6 +41,7 @@ import { tabContextMenuItems } from "./tabContextMenuItems";
 import { useEntryDragStore } from "@/modules/explorer/lib/dragEntry";
 import { useNoteDragStore } from "@/modules/notes/lib/noteDrag";
 import { useSshDragStore } from "@/modules/ssh/lib/sshDrag";
+import { canSearchRoot } from "@/modules/explorer/lib/fsBridge";
 
 // Module-level so the reference stays stable across renders. Passing an inline
 // options object would make useSensor/useSensors return a new sensors array on
@@ -222,6 +225,9 @@ export function TabBar() {
   const openLauncherTab = useTabsStore((s) => s.openLauncherTab);
   const toggleSidebar = useUiStore((s) => s.toggleSidebar);
   const sidebarVisible = useUiStore((s) => s.sidebarVisible);
+  const openFileFinder = useUiStore((s) => s.openFileFinder);
+  const rootPath = useWorkspaceStore((s) => s.rootPath);
+  const canSearchFiles = canSearchRoot(rootPath);
   const reorderTab = useTabsStore((s) => s.reorderTab);
   const entryTabBarHover = useEntryDragStore((s) => s.tabBarHover);
   const noteTabBarHover = useNoteDragStore((s) => s.tabBarHover);
@@ -306,6 +312,17 @@ export function TabBar() {
         </div>
         <DragOverlay>{draggingTab ? <TabOverlay tab={draggingTab} /> : null}</DragOverlay>
       </DndContext>
+      <Tooltip label={t("explorer:findFiles")} side="bottom" className="shrink-0">
+        <button
+          type="button"
+          aria-label={t("explorer:findFiles")}
+          disabled={!canSearchFiles}
+          onClick={openFileFinder}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-elevated hover:text-fg disabled:pointer-events-none disabled:opacity-40"
+        >
+          <Search size={15} />
+        </button>
+      </Tooltip>
     </header>
   );
 }

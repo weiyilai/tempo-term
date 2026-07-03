@@ -41,6 +41,17 @@ export function joinPath(dir: string, child: string): string {
 }
 
 /**
+ * The parent segment of an already-relative path (as returned by
+ * `relativePath`), or "" when the entry has no directory component (it sits
+ * directly at the root). Used by the file search results list to show the
+ * folder a match lives in alongside its name.
+ */
+export function relativeDirOf(relative: string): string {
+  const name = basename(relative);
+  return relative.length > name.length ? relative.slice(0, relative.length - name.length - 1) : "";
+}
+
+/**
  * Express `path` relative to `root`. When `path` sits inside `root` the common
  * prefix (and the separator after it) is stripped; otherwise the original
  * absolute path is returned unchanged.

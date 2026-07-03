@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { buildRemoteUri, parseRemoteUri } from "@/modules/ssh/lib/remotePath";
+import { buildRemoteUri, isRemoteUri, parseRemoteUri } from "@/modules/ssh/lib/remotePath";
 import { sftpReadDir, sftpReadFile, sftpWriteFile } from "@/modules/ssh/lib/sftp-bridge";
 import { sftpSessionStore } from "@/modules/ssh/lib/sftpSessionStore";
 
@@ -50,6 +50,12 @@ export async function fsWriteFile(path: string, contents: string): Promise<void>
 
 export function fsListFiles(root: string, limit?: number): Promise<string[]> {
   return invoke<string[]>("fs_list_files", { root, limit });
+}
+
+/** Whether `root` is a local folder `fsListFiles` can search — it has no SFTP
+ *  support, so a remote root (or no open folder at all) is not searchable. */
+export function canSearchRoot(root: string | null): root is string {
+  return root !== null && !isRemoteUri(root);
 }
 
 export function fsGrep(
