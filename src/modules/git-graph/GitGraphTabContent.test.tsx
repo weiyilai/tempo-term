@@ -16,6 +16,8 @@ vi.mock("./lib/gitGraphBridge", () => ({
   gitFetch: vi.fn(),
   gitCommitDetails: vi.fn().mockResolvedValue({ message: "", files: [] }),
   gitCommitFileDiff: vi.fn().mockResolvedValue(""),
+  gitCommitRangeFiles: vi.fn().mockResolvedValue([]),
+  gitCommitRangeFileDiff: vi.fn().mockResolvedValue(""),
   gitWorktreeList: vi.fn().mockResolvedValue([]),
 }));
 
@@ -254,5 +256,38 @@ describe("GitGraphTabContent worktree selector wiring", () => {
     await screen.findByText("msg aaa1111");
 
     expect(screen.queryByLabelText("Worktree")).not.toBeInTheDocument();
+  });
+});
+
+describe("GitGraphTabContent compare mode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(gitWorktreeList).mockResolvedValue([]);
+    usePendingGraphSelectionStore.setState({ hash: null });
+    useWorkspaceStore.getState().setRoot("/repo");
+  });
+
+  it("shift-clicking a second commit shows the compare header, and a plain click collapses back", async () => {
+    vi.mocked(gitGraphLog).mockImplementation(async () =>
+      commitList(["aaa1111", "bbb2222"], false),
+    );
+
+    render(<GitGraphTabContent />);
+    await waitFor(() => screen.getByText("msg aaa1111"));
+
+    const rowA = screen.getByText("msg aaa1111").closest("div[class*='absolute']")!;
+    const rowB = screen.getByText("msg bbb2222").closest("div[class*='absolute']")!;
+
+    fireEvent.click(rowA);
+    fireEvent.click(rowB, { shiftKey: true });
+
+    // aaa1111 is the newer commit (index 0), bbb2222 the older one (index 1):
+    // from (older) .. to (newer).
+    await waitFor(() => expect(screen.getByText("bbb2222 .. aaa1111")).toBeInTheDocument());
+
+    fireEvent.click(rowA);
+
+    await waitFor(() => expect(screen.getAllByText("aaa1111").length).toBeGreaterThan(0));
+    expect(screen.queryByText("bbb2222 .. aaa1111")).not.toBeInTheDocument();
   });
 });

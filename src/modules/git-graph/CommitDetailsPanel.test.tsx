@@ -2,12 +2,19 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import "@/i18n";
 import { CommitDetailsPanel } from "./CommitDetailsPanel";
-import { gitCommitDetails, gitCommitFileDiff } from "./lib/gitGraphBridge";
+import {
+  gitCommitDetails,
+  gitCommitFileDiff,
+  gitCommitRangeFiles,
+  gitCommitRangeFileDiff,
+} from "./lib/gitGraphBridge";
 import type { CommitNode } from "./types";
 
 vi.mock("./lib/gitGraphBridge", () => ({
   gitCommitDetails: vi.fn(),
   gitCommitFileDiff: vi.fn().mockResolvedValue(""),
+  gitCommitRangeFiles: vi.fn(),
+  gitCommitRangeFileDiff: vi.fn().mockResolvedValue(""),
 }));
 
 const LABELS = {
@@ -49,7 +56,14 @@ describe("CommitDetailsPanel changed-files tree", () => {
         { status: "M", path: "dist/bbb/y.ts" },
       ],
     });
-    render(<CommitDetailsPanel repo="/repo" commit={COMMIT} onClose={() => {}} labels={LABELS} />);
+    render(
+      <CommitDetailsPanel
+        repo="/repo"
+        selection={{ mode: "single", commit: COMMIT }}
+        onClose={() => {}}
+        labels={LABELS}
+      />,
+    );
     await screen.findByText("dist/aaa/x.ts");
 
     fireEvent.click(screen.getByRole("button", { name: "Group by folder" }));
@@ -64,7 +78,14 @@ describe("CommitDetailsPanel changed-files tree", () => {
       message: "feat: x",
       files: [{ status: "M", path: "dist/aaa/x.ts" }],
     });
-    render(<CommitDetailsPanel repo="/repo" commit={COMMIT} onClose={() => {}} labels={LABELS} />);
+    render(
+      <CommitDetailsPanel
+        repo="/repo"
+        selection={{ mode: "single", commit: COMMIT }}
+        onClose={() => {}}
+        labels={LABELS}
+      />,
+    );
     await screen.findByText("dist/aaa/x.ts");
     fireEvent.click(screen.getByRole("button", { name: "Group by folder" }));
     await screen.findByText("dist");
@@ -79,7 +100,14 @@ describe("CommitDetailsPanel changed-files tree", () => {
       message: "feat: x",
       files: [{ status: "M", path: "dist/aaa/x.ts" }],
     });
-    render(<CommitDetailsPanel repo="/repo" commit={COMMIT} onClose={() => {}} labels={LABELS} />);
+    render(
+      <CommitDetailsPanel
+        repo="/repo"
+        selection={{ mode: "single", commit: COMMIT }}
+        onClose={() => {}}
+        labels={LABELS}
+      />,
+    );
     await screen.findByText("dist/aaa/x.ts");
     fireEvent.click(screen.getByRole("button", { name: "Group by folder" }));
     await screen.findByText("x.ts");
@@ -89,5 +117,47 @@ describe("CommitDetailsPanel changed-files tree", () => {
     await waitFor(() =>
       expect(gitCommitFileDiff).toHaveBeenCalledWith("/repo", "abc1234", "dist/aaa/x.ts"),
     );
+  });
+});
+
+describe("CommitDetailsPanel compare mode", () => {
+  const OTHER: CommitNode = {
+    hash: "def5678",
+    parents: [],
+    author: "b",
+    date: "yesterday",
+    message: "fix: y",
+    refs: [],
+  };
+
+  it("shows both hashes in the header and fetches the range diff", async () => {
+    vi.mocked(gitCommitRangeFiles).mockResolvedValue([{ status: "M", path: "a.ts" }]);
+    render(
+      <CommitDetailsPanel
+        repo="/repo"
+        selection={{ mode: "compare", from: OTHER, to: COMMIT }}
+        onClose={() => {}}
+        labels={LABELS}
+      />,
+    );
+
+    expect(await screen.findByText("def5678 .. abc1234")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(gitCommitRangeFileDiff).toHaveBeenCalledWith("/repo", "def5678", "abc1234", "a.ts"),
+    );
+  });
+
+  it("hides the AI tab in compare mode", async () => {
+    vi.mocked(gitCommitRangeFiles).mockResolvedValue([{ status: "M", path: "a.ts" }]);
+    render(
+      <CommitDetailsPanel
+        repo="/repo"
+        selection={{ mode: "compare", from: OTHER, to: COMMIT }}
+        onClose={() => {}}
+        labels={LABELS}
+      />,
+    );
+    await screen.findByText("a.ts");
+    expect(screen.queryByRole("button", { name: "AI Explain" })).not.toBeInTheDocument();
   });
 });

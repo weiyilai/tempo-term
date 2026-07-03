@@ -631,7 +631,6 @@ export function GitGraphTabContent() {
             <div style={{ height: `${detailsHeight}px` }} className="shrink-0">
               <CommitDetailsPanel
                 repo={repo}
-                commit={selection.mode === "single" ? selection.commit : selection.to}
                 selection={selection}
                 onClose={() => setSelection(null)}
                 labels={detailsLabels}
