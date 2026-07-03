@@ -75,4 +75,17 @@ describe("parseOsc7Cwd", () => {
   it("rejects unreasonably long paths since the value is persisted", () => {
     expect(parseOsc7Cwd(`file:///C:/${"a".repeat(5000)}`)).toBeNull();
   });
+
+  it("rejects an oversized payload", () => {
+    // A hostile or runaway program can emit a multi-megabyte OSC 7 sequence.
+    // The input cap short-circuits before decodeURIComponent and the regexes
+    // touch it; the percent-encoded form below would otherwise decode to a
+    // string the post-decode cap rejects anyway — this pins the early exit.
+    expect(parseOsc7Cwd(`file:///C:/${"%41".repeat(2_000_000)}`)).toBeNull();
+    // Worst-case legit encoding (CJK chars are 9 percent-encoded chars each)
+    // still fits comfortably under the cap for any realistic cwd.
+    expect(parseOsc7Cwd(`file:///C:/${"%E4%B8%AD".repeat(80)}`)).toBe(
+      `C:\\${"中".repeat(80)}`,
+    );
+  });
 });

@@ -23,7 +23,13 @@
  * (`file://localhost/C:\Users\f o` — spaces, backslashes and `%` unencoded).
  */
 export function parseOsc7Cwd(payload: string): string | null {
-  if (!payload.startsWith("file://")) {
+  // Cap the raw input before any decoding or regex work: a hostile or runaway
+  // program can emit a multi-megabyte OSC 7 sequence, and while the post-decode
+  // length check below already rejects the result, there is no reason to spend
+  // decodeURIComponent + regex passes on it first. 8192 comfortably covers the
+  // worst legit case (a fully percent-encoded CJK path is 9 chars per
+  // character, so ~900 path characters — far beyond any practical cwd).
+  if (payload.length > 8192 || !payload.startsWith("file://")) {
     return null;
   }
   const rest = payload.slice("file://".length);
