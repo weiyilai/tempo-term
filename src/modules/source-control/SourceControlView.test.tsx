@@ -96,7 +96,7 @@ describe("SourceControlView row interactions", () => {
 
   it("history row right-click offers copy hash", async () => {
     vi.mocked(gitBridge.gitLog).mockResolvedValue([
-      { id: "abc1234", summary: "feat: x", author: "a", timestamp: 1 },
+      { id: "abc1234", summary: "feat: x", author: "a", timestamp: 1, parents: [] },
     ]);
     render(<SourceControlView />);
     fireEvent.contextMenu(await screen.findByText("feat: x"));
@@ -313,7 +313,7 @@ describe("SourceControlView commit jump", () => {
     vi.mocked(gitBridge.gitResolveRepo).mockResolvedValue("/repo");
     vi.mocked(gitBridge.gitStatus).mockResolvedValue({ branch: "main", staged: [], unstaged: [] });
     vi.mocked(gitBridge.gitLog).mockResolvedValue([
-      { id: "abc1234", summary: "feat: x", author: "a", timestamp: 1 },
+      { id: "abc1234", summary: "feat: x", author: "a", timestamp: 1, parents: [] },
     ]);
     useWorkspaceStore.getState().setRoot("/repo");
     useTabsStore.setState({ tabs: [], activeId: null, spaces: [], activeSpaceId: null });
@@ -336,5 +336,60 @@ describe("SourceControlView commit jump", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "View in Git Graph" }));
 
     expect(usePendingGraphSelectionStore.getState().hash).toBe("abc1234");
+  });
+});
+
+describe("SourceControlView commit graph", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(gitBridge.gitResolveRepo).mockResolvedValue("/repo");
+    vi.mocked(gitBridge.gitStatus).mockResolvedValue({ branch: "main", staged: [], unstaged: [] });
+    useWorkspaceStore.getState().setRoot("/repo");
+  });
+
+  it("draws one graph dot per history commit, marking the newest as HEAD", async () => {
+    vi.mocked(gitBridge.gitLog).mockResolvedValue([
+      { id: "c3", summary: "third", author: "a", timestamp: 3, parents: ["c2"] },
+      { id: "c2", summary: "second", author: "a", timestamp: 2, parents: ["c1"] },
+      { id: "c1", summary: "first", author: "a", timestamp: 1, parents: [] },
+    ]);
+
+    const { container } = render(<SourceControlView />);
+    await screen.findByText("third");
+
+    const dots = container.querySelectorAll("svg.history-graph circle");
+    expect(dots).toHaveLength(3);
+    // The first commit returned by git log is always HEAD; it gets a larger
+    // dot filled with the accent colour instead of a branch-lane colour.
+    expect(dots[0].getAttribute("fill")).toBe("var(--color-accent)");
+    expect(Number(dots[0].getAttribute("r"))).toBeGreaterThan(
+      Number(dots[1].getAttribute("r")),
+    );
+  });
+
+  it("draws a connector for each parent link in a linear history", async () => {
+    vi.mocked(gitBridge.gitLog).mockResolvedValue([
+      { id: "c2", summary: "second", author: "a", timestamp: 2, parents: ["c1"] },
+      { id: "c1", summary: "first", author: "a", timestamp: 1, parents: [] },
+    ]);
+
+    const { container } = render(<SourceControlView />);
+    await screen.findByText("second");
+
+    expect(container.querySelectorAll("svg.history-graph path")).toHaveLength(1);
+  });
+
+  it("opens a second lane for a merge commit", async () => {
+    vi.mocked(gitBridge.gitLog).mockResolvedValue([
+      { id: "m", summary: "merge", author: "a", timestamp: 3, parents: ["c1", "c2"] },
+      { id: "c2", summary: "side", author: "a", timestamp: 2, parents: ["c1"] },
+      { id: "c1", summary: "first", author: "a", timestamp: 1, parents: [] },
+    ]);
+
+    const { container } = render(<SourceControlView />);
+    await screen.findByText("merge");
+
+    // Three parent links total: m→c1, m→c2 (the merge's two parents), c2→c1.
+    expect(container.querySelectorAll("svg.history-graph path")).toHaveLength(3);
   });
 });

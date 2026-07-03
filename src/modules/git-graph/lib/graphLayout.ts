@@ -1,4 +1,13 @@
-import type { CommitNode } from "../types";
+/**
+ * Minimal shape the layout algorithm needs: an id and its parent ids. A full
+ * `CommitNode` satisfies this structurally, but callers that only have a
+ * flat commit list (e.g. the sidebar's compact history graph) don't need to
+ * fabricate the rest of `CommitNode`'s fields to reuse this algorithm.
+ */
+export interface GraphLayoutCommit {
+  hash: string;
+  parents: string[];
+}
 
 /** Geometry used to turn lane/row indices into SVG coordinates. */
 export interface GraphGeometry {
@@ -64,7 +73,7 @@ export function laneX(lane: number, geometry: GraphGeometry): number {
  * Pure (no DOM, no React) so it can be unit tested in isolation.
  */
 export function computeGraphLayout(
-  commits: readonly CommitNode[],
+  commits: readonly GraphLayoutCommit[],
   geometry: GraphGeometry = DEFAULT_GEOMETRY,
 ): GraphLayout {
   const layouts: Record<string, CommitLayout> = {};

@@ -25,6 +25,9 @@ pub struct CommitInfo {
     pub summary: String,
     pub author: String,
     pub timestamp: i64,
+    /// Parent commit hashes, abbreviated to match `id`. Lets the frontend lay
+    /// out a compact commit graph without a second round-trip.
+    pub parents: Vec<String>,
 }
 
 /// A ref decoration attached to a commit in the graph view. `kind` is one of
@@ -395,26 +398,58 @@ pub fn commit(repo_path: &str, message: &str) -> Result<String, String> {
     Ok(oid.to_string())
 }
 
-pub fn log(repo_path: &str, limit: usize) -> Result<Vec<CommitInfo>, String> {
-    let repo = Repository::open(repo_path).map_err(|e| e.message().to_string())?;
-    let mut revwalk = repo.revwalk().map_err(|e| e.message().to_string())?;
-    if revwalk.push_head().is_err() {
-        return Ok(Vec::new());
+/// Parses one `git log --pretty=format:%h|%p|%an|%ct|%s` line. Pure function,
+/// mirrors `parse_graph_commit`'s style. `%p` is empty (not absent) for a
+/// root commit, which `split_whitespace` already collapses to an empty Vec.
+fn parse_commit_info(line: &str) -> Option<CommitInfo> {
+    if line.trim().is_empty() {
+        return None;
     }
+    let parts: Vec<&str> = line.split('|').collect();
+    let timestamp: i64 = parts.get(3).unwrap_or(&"").trim().parse().unwrap_or(0);
+    Some(CommitInfo {
+        id: parts.first().unwrap_or(&"").trim().to_string(),
+        parents: parts
+            .get(1)
+            .unwrap_or(&"")
+            .split_whitespace()
+            .map(String::from)
+            .collect(),
+        author: parts.get(2).unwrap_or(&"").trim().to_string(),
+        timestamp,
+        // The summary may itself contain "|", so re-join the tail.
+        summary: parts
+            .get(4..)
+            .map(|rest| rest.join("|"))
+            .unwrap_or_default()
+            .trim()
+            .to_string(),
+    })
+}
 
-    let mut commits = Vec::new();
-    for oid in revwalk.take(limit) {
-        let oid = oid.map_err(|e| e.message().to_string())?;
-        let commit = repo.find_commit(oid).map_err(|e| e.message().to_string())?;
-        let id = oid.to_string();
-        commits.push(CommitInfo {
-            id: id.chars().take(7).collect(),
-            summary: commit.summary().unwrap_or_default().to_string(),
-            author: commit.author().name().unwrap_or_default().to_string(),
-            timestamp: commit.time().seconds(),
-        });
-    }
-    Ok(commits)
+pub fn log(repo_path: &str, limit: usize) -> Result<Vec<CommitInfo>, String> {
+    let limit = limit.max(1);
+    let max_count = format!("--max-count={limit}");
+    // Shell out to the system `git` binary (same approach as `graph_log`
+    // below) instead of a libgit2 revwalk: `--max-count` keeps this genuinely
+    // bounded by `limit` regardless of total repo history. A libgit2 revwalk
+    // with an explicit sort mode (needed for correct child-before-parent
+    // ordering) forces an eager traversal of the *entire* reachable history
+    // before it can yield the first result, which made this O(repo size)
+    // instead of O(limit) on large repos.
+    let stdout = run_git(
+        repo_path,
+        &[
+            "log",
+            "--date-order",
+            "--pretty=format:%h|%p|%an|%ct|%s",
+            &max_count,
+        ],
+    )
+    // An empty/unborn repo makes `git log` exit non-zero; treat that as no history.
+    .unwrap_or_default();
+
+    Ok(stdout.lines().filter_map(parse_commit_info).collect())
 }
 
 #[tauri::command]
@@ -1354,6 +1389,29 @@ mod tests {
     }
 
     #[test]
+    fn parse_commit_info_splits_fields_and_keeps_pipes_in_summary() {
+        let commit = parse_commit_info("abc123|p1 p2|Ada|1700000000|fix: a|b").unwrap();
+        assert_eq!(commit.id, "abc123");
+        assert_eq!(commit.parents, vec!["p1".to_string(), "p2".to_string()]);
+        assert_eq!(commit.author, "Ada");
+        assert_eq!(commit.timestamp, 1700000000);
+        // The summary retained its embedded pipe.
+        assert_eq!(commit.summary, "fix: a|b");
+    }
+
+    #[test]
+    fn parse_commit_info_handles_a_root_commit_with_no_parents() {
+        let commit = parse_commit_info("abc123||Ada|1700000000|root").unwrap();
+        assert!(commit.parents.is_empty());
+    }
+
+    #[test]
+    fn parse_commit_info_rejects_blank_lines() {
+        assert!(parse_commit_info("   ").is_none());
+        assert!(parse_commit_info("").is_none());
+    }
+
+    #[test]
     fn graph_log_and_branches_on_a_real_repo() {
         let dir = temp_repo_dir("graph");
         let path = dir.to_string_lossy().to_string();
@@ -1552,6 +1610,36 @@ mod tests {
         let history = log(&path, 10).unwrap();
         assert_eq!(history.len(), 1);
         assert_eq!(history[0].summary, "first commit");
+        // A root commit has no parents.
+        assert!(history[0].parents.is_empty());
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn log_includes_parent_hashes_for_graph_layout() {
+        let dir = temp_repo_dir("log-parents");
+        let path = dir.to_string_lossy().to_string();
+        run_git(&path, &["init", "-b", "main"]).unwrap();
+        run_git(&path, &["config", "user.email", "t@t.dev"]).unwrap();
+        run_git(&path, &["config", "user.name", "Tester"]).unwrap();
+        std::fs::write(dir.join("a.txt"), "one").unwrap();
+        run_git(&path, &["add", "."]).unwrap();
+        run_git(&path, &["commit", "-m", "first"]).unwrap();
+        let first_id = run_git(&path, &["rev-parse", "--short", "HEAD"])
+            .unwrap()
+            .trim()
+            .to_string();
+        std::fs::write(dir.join("a.txt"), "two").unwrap();
+        run_git(&path, &["add", "."]).unwrap();
+        run_git(&path, &["commit", "-m", "second"]).unwrap();
+
+        let history = log(&path, 10).unwrap();
+        assert_eq!(history.len(), 2);
+        // Newest first: the second commit's parent is the first commit.
+        assert_eq!(history[0].summary, "second");
+        assert_eq!(history[0].parents, vec![first_id]);
+        assert!(history[1].parents.is_empty());
 
         let _ = std::fs::remove_dir_all(&dir);
     }

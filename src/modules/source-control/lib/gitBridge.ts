@@ -17,6 +17,8 @@ export interface CommitInfo {
   summary: string;
   author: string;
   timestamp: number;
+  /** Parent commit hashes, abbreviated to match `id`; used to lay out the sidebar's commit graph. */
+  parents: string[];
 }
 
 export function gitResolveRepo(path: string): Promise<string | null> {

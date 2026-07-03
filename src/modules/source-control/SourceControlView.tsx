@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ChevronDown,
@@ -43,11 +43,14 @@ import { Tooltip } from "@/components/Tooltip";
 import { buildFileTree, collectDescendantFiles, type TreeNode } from "@/lib/fileTree";
 import { useCollapsedPaths } from "@/lib/useCollapsedPaths";
 import { usePendingGraphSelectionStore } from "@/modules/git-graph/lib/pendingGraphSelectionStore";
+import { edgePath } from "@/modules/git-graph/lib/graphLayout";
+import { BRANCH_COLORS } from "@/modules/git-graph/lib/branchColors";
 import { generateCommitMessage } from "./lib/aiCommit";
 import { withMinDuration } from "@/lib/withMinDuration";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { useTabsStore } from "@/stores/tabsStore";
 import { useChatStore } from "@/modules/ai/store/chatStore";
+import { computeHistoryGraphLayout, HISTORY_GRAPH_GEOMETRY } from "./lib/commitGraph";
 
 type ViewMode = "flat" | "folder";
 
@@ -229,10 +232,11 @@ function HistoryRow({ commit }: { commit: CommitInfo }) {
         e.preventDefault();
         setMenu({ x: e.clientX, y: e.clientY });
       }}
-      className="cursor-pointer py-1 text-xs hover:bg-bg-elevated/60"
+      style={{ height: `${HISTORY_GRAPH_GEOMETRY.rowHeight}px` }}
+      className="flex cursor-pointer items-center gap-2 text-xs hover:bg-bg-elevated/60"
     >
-      <span className="font-mono text-fg-subtle">{commit.id}</span>
-      <span className="ml-2 text-fg-muted">{commit.summary}</span>
+      <span className="shrink-0 font-mono text-fg-subtle">{commit.id}</span>
+      <span className="min-w-0 flex-1 truncate text-fg-muted">{commit.summary}</span>
       {menu && (
         <ContextMenu
           x={menu.x}
@@ -264,6 +268,55 @@ function HistoryRow({ commit }: { commit: CommitInfo }) {
         />
       )}
     </li>
+  );
+}
+
+/**
+ * Compact SVG rail drawn beside the history list: one dot per commit and a
+ * connector per parent link, laid out with `HISTORY_GRAPH_GEOMETRY` so each
+ * row lines up with its `HistoryRow` counterpart. Kept intentionally narrow
+ * (see HISTORY_GRAPH_GEOMETRY) — this is a compact indicator of order,
+ * divergence and merges, not the full interactive Git Graph tab.
+ */
+function HistoryGraphColumn({ commits }: { commits: CommitInfo[] }) {
+  const { layouts, edges } = useMemo(() => computeHistoryGraphLayout(commits), [commits]);
+  const width =
+    HISTORY_GRAPH_GEOMETRY.paddingLeft +
+    HISTORY_GRAPH_GEOMETRY.maxLane * HISTORY_GRAPH_GEOMETRY.laneWidth +
+    18;
+  const height = commits.length * HISTORY_GRAPH_GEOMETRY.rowHeight;
+
+  return (
+    <svg width={width} height={height} className="history-graph shrink-0" aria-hidden="true">
+      {edges.map((edge, idx) => (
+        <path
+          key={`edge-${idx}`}
+          d={edgePath(edge, HISTORY_GRAPH_GEOMETRY.rowHeight)}
+          fill="none"
+          stroke={BRANCH_COLORS[edge.colorIndex % BRANCH_COLORS.length]}
+          strokeWidth={1.5}
+          className="opacity-80"
+        />
+      ))}
+      {commits.map((commit, index) => {
+        const layout = layouts[commit.id];
+        if (!layout) {
+          return null;
+        }
+        // The history list is always rooted at HEAD (git log walks from
+        // HEAD), so the first row is always the current commit.
+        const isHead = index === 0;
+        return (
+          <circle
+            key={commit.id}
+            cx={layout.x}
+            cy={layout.y}
+            r={isHead ? 3.5 : 2.5}
+            fill={isHead ? "var(--color-accent)" : BRANCH_COLORS[layout.colorIndex % BRANCH_COLORS.length]}
+          />
+        );
+      })}
+    </svg>
   );
 }
 
@@ -760,11 +813,14 @@ export function SourceControlView() {
             <h3 className="px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
               {t("history")}
             </h3>
-            <ul className="px-3">
-              {history.map((commit) => (
-                <HistoryRow key={commit.id} commit={commit} />
-              ))}
-            </ul>
+            <div className="flex gap-1 px-3">
+              <HistoryGraphColumn commits={history} />
+              <ul className="min-w-0 flex-1">
+                {history.map((commit) => (
+                  <HistoryRow key={commit.id} commit={commit} />
+                ))}
+              </ul>
+            </div>
           </section>
         )}
       </div>
