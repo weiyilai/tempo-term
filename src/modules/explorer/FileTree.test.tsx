@@ -250,6 +250,47 @@ describe("FileTree expand-all", () => {
 
     expect(screen.queryByText("leaf.ts")).not.toBeInTheDocument();
   });
+
+  it("does not auto-cascade into a heavy/generated directory like node_modules", async () => {
+    // fs_read_dir has no gitignore awareness (unlike the search palette's
+    // fs_list_files), so an unconditional recursive cascade would expand
+    // node_modules' entire contents — tens of thousands of DOM nodes for a
+    // typical JS project — making the subsequent collapse-all pass visibly
+    // slow. Expand-all should skip auto-descending into well-known
+    // heavy/generated directories, the way other editors' "expand all" does.
+    const { fsReadDir } = await import("./lib/fsBridge");
+    vi.mocked(fsReadDir).mockImplementation(async (path: string) => {
+      if (path === "/p") {
+        return [
+          { name: "src", path: "/p/src", is_dir: true, size: 0 },
+          { name: "node_modules", path: "/p/node_modules", is_dir: true, size: 0 },
+        ];
+      }
+      if (path === "/p/src") {
+        return [{ name: "index.ts", path: "/p/src/index.ts", is_dir: false, size: 0 }];
+      }
+      if (path === "/p/node_modules") {
+        return [
+          { name: "some-pkg", path: "/p/node_modules/some-pkg", is_dir: true, size: 0 },
+        ];
+      }
+      return [];
+    });
+    const entries = [
+      { name: "src", path: "/p/src", is_dir: true, size: 0 },
+      { name: "node_modules", path: "/p/node_modules", is_dir: true, size: 0 },
+    ];
+    render(<FileTree entries={entries} onReloadRoot={() => {}} expandSignal={1} />);
+
+    expect(await screen.findByText("index.ts")).toBeInTheDocument();
+    expect(fsReadDir).not.toHaveBeenCalledWith("/p/node_modules");
+    expect(screen.queryByText("some-pkg")).not.toBeInTheDocument();
+
+    // Manually clicking node_modules must still work — only the automatic
+    // cascade skips it, not the user's own explicit choice to look inside.
+    fireEvent.click(screen.getByText("node_modules"));
+    expect(await screen.findByText("some-pkg")).toBeInTheDocument();
+  });
 });
 
 describe("FileTree context menu: open in new tab", () => {

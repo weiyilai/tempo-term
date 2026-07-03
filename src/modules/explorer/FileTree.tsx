@@ -36,6 +36,30 @@ import { useChatStore } from "@/modules/ai/store/chatStore";
 
 type MenuPosition = { x: number; y: number };
 
+/**
+ * Directory names Expand All should not auto-descend into. `fs_read_dir`
+ * (unlike the search palette's gitignore-aware `fs_list_files`) has no
+ * ignore-file awareness, so an unconditional recursive cascade would mount a
+ * child TreeNode for every file inside e.g. `node_modules` — tens of
+ * thousands of DOM nodes for a typical JS project — which then makes the
+ * next collapse-all pass (a single synchronous unmount of all of them)
+ * visibly slow. Matches the common set of generated/dependency directories
+ * most editors also skip during a bulk "expand all". A manual click on one
+ * of these still opens it — only the automatic cascade skips it.
+ */
+const AUTO_EXPAND_EXCLUDED_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "target",
+  "dist",
+  "build",
+  ".next",
+  ".turbo",
+  ".venv",
+  "venv",
+  "__pycache__",
+]);
+
 /** Whether an inline name input is open, and which kind of entry it creates. */
 type Creating = { kind: "file" | "dir" } | null;
 
@@ -96,7 +120,7 @@ function TreeNode({ entry, depth, onReloadParent, collapseSignal, expandSignal }
   // (and immediately undo this) on every fresh mount, where `expanded`
   // starts out false by default.
   useEffect(() => {
-    if (expandSignal) {
+    if (expandSignal && !(entry.is_dir && AUTO_EXPAND_EXCLUDED_DIRS.has(entry.name))) {
       setIsExpandingAll(true);
       void expand();
     }
