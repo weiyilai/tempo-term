@@ -1582,8 +1582,10 @@ mod tests {
         assert!(ensure_not_flag("-x").is_err());
         assert!(ensure_not_flag("--upload-pack=evil").is_err());
 
-        assert!(commit_range_files("/no/such/repo", "-x", "HEAD").is_err());
-        assert!(commit_range_file_diff("/no/such/repo", "HEAD", "-x", "a.txt").is_err());
+        let err = commit_range_files("/no/such/repo", "-x", "HEAD").unwrap_err();
+        assert!(err.to_lowercase().contains("flag"), "got: {err}");
+        let err = commit_range_file_diff("/no/such/repo", "HEAD", "-x", "a.txt").unwrap_err();
+        assert!(err.to_lowercase().contains("flag"), "got: {err}");
     }
 
     #[test]
