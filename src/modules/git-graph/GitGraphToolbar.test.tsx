@@ -269,6 +269,26 @@ describe("GitGraphToolbar worktree selector", () => {
     expect(props.onSelectWorktree).not.toHaveBeenCalled();
   });
 
+  it("matches the current worktree across mixed slash directions (Windows)", () => {
+    const props = renderToolbar({
+      worktrees: [
+        { path: "C:\\repos\\app", branch: "master" },
+        { path: "C:\\repos\\app-dev", branch: "feature" },
+      ],
+      // resolve_repo / system APIs may hand back forward slashes for the
+      // same directory git printed with backslashes.
+      currentWorktreePath: "C:/repos/app",
+    });
+
+    expect(screen.getAllByLabelText(labels.worktree)[0]).toHaveTextContent("app (master)");
+
+    // Re-picking the current worktree must be recognized as current — no
+    // redundant workspace switch.
+    fireEvent.click(screen.getAllByLabelText(labels.worktree)[0]);
+    fireEvent.click(screen.getByRole("button", { name: /app \(master\)/ }));
+    expect(props.onSelectWorktree).not.toHaveBeenCalled();
+  });
+
   it("falls back to full paths when two labels would collide", () => {
     renderToolbar({
       worktrees: [

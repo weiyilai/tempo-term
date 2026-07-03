@@ -42,9 +42,12 @@ function buildWorktreeOptions(worktrees: WorktreeItem[]): WorktreeOption[] {
   );
 }
 
-/** Trailing-slash-insensitive path equality (resolve_repo trims, git doesn't). */
+/** Separator- and trailing-slash-insensitive path equality: git prints
+ * forward slashes while Windows system paths may carry backslashes, and
+ * resolve_repo trims the trailing slash git keeps. */
 function samePath(a: string, b: string): boolean {
-  return a.replace(/[\\/]+$/, "") === b.replace(/[\\/]+$/, "");
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "");
+  return norm(a) === norm(b);
 }
 
 export interface GitGraphToolbarLabels {
@@ -260,7 +263,7 @@ export function GitGraphToolbar({
               options={worktreeOptions.map((o) => o.label)}
               onChange={(label) => {
                 const picked = worktreeOptions.find((o) => o.label === label);
-                if (picked && (!currentWorktree || picked.path !== currentWorktree.path)) {
+                if (picked && (!currentWorktree || !samePath(picked.path, currentWorktree.path))) {
                   onSelectWorktree(picked.path);
                 }
               }}
