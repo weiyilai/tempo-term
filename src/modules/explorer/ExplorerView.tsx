@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CopyMinus, CopyPlus, FolderOpen, Search } from "lucide-react";
+import { ChevronsDownUp, ChevronsUpDown, FolderOpen, Search } from "lucide-react";
 import { FileTree } from "./FileTree";
 import { FileFinder } from "./FileFinder";
 import { Tooltip } from "@/components/Tooltip";
@@ -20,6 +20,11 @@ export function ExplorerView() {
   const [loading, setLoading] = useState(false);
   const [collapseSignal, setCollapseSignal] = useState(0);
   const [expandSignal, setExpandSignal] = useState(0);
+  // Tracks which action the merged expand/collapse toggle button performs
+  // next. A fresh root always starts fully collapsed, so this resets to
+  // false whenever the root changes rather than trying to inspect every
+  // node's live expanded state.
+  const [treeExpanded, setTreeExpanded] = useState(false);
 
   // A remote (SFTP) root hides local-only controls and shows the remote path
   // rather than the raw ssh:// uri.
@@ -51,6 +56,28 @@ export function ExplorerView() {
   useEffect(() => {
     loadEntries();
   }, [loadEntries]);
+
+  // A newly opened (or switched-to) root always renders fully collapsed.
+  // ExplorerView doesn't remount when the workspace root changes (rootPath
+  // just comes from the store), so collapseSignal/expandSignal must be reset
+  // here too: otherwise a leftover nonzero expandSignal from the previous
+  // root would hit the new root's freshly mounted TreeNodes on mount
+  // (effects always run on mount, regardless of the dependency array) and
+  // silently cascade-expand it.
+  useEffect(() => {
+    setTreeExpanded(false);
+    setCollapseSignal(0);
+    setExpandSignal(0);
+  }, [rootPath]);
+
+  function toggleExpandCollapseAll() {
+    if (treeExpanded) {
+      setCollapseSignal((v) => v + 1);
+    } else {
+      setExpandSignal((v) => v + 1);
+    }
+    setTreeExpanded((v) => !v);
+  }
 
   return (
     <div className="relative flex h-full flex-col bg-bg-inset">
@@ -84,28 +111,16 @@ export function ExplorerView() {
             </>
           )}
           {rootPath && (
-            <>
-              <Tooltip label={t("expandAll")}>
-                <button
-                  type="button"
-                  aria-label={t("expandAll")}
-                  onClick={() => setExpandSignal((v) => v + 1)}
-                  className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-                >
-                  <CopyPlus size={15} />
-                </button>
-              </Tooltip>
-              <Tooltip label={t("collapseAll")}>
-                <button
-                  type="button"
-                  aria-label={t("collapseAll")}
-                  onClick={() => setCollapseSignal((v) => v + 1)}
-                  className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
-                >
-                  <CopyMinus size={15} />
-                </button>
-              </Tooltip>
-            </>
+            <Tooltip label={treeExpanded ? t("collapseAll") : t("expandAll")}>
+              <button
+                type="button"
+                aria-label={treeExpanded ? t("collapseAll") : t("expandAll")}
+                onClick={toggleExpandCollapseAll}
+                className="rounded p-1 text-fg-muted hover:bg-bg-elevated hover:text-fg"
+              >
+                {treeExpanded ? <ChevronsDownUp size={15} /> : <ChevronsUpDown size={15} />}
+              </button>
+            </Tooltip>
           )}
         </div>
       </div>

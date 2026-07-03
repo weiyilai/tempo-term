@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   ChevronDown,
@@ -66,11 +66,20 @@ function TreeNode({ entry, depth, onReloadParent, collapseSignal, expandSignal }
   // resets, so this is what lets a later manual re-expand stay local
   // instead of re-cascading into this node's children.
   const [isExpandingAll, setIsExpandingAll] = useState(false);
+  // Bumped every time this node is told to collapse (collapse-all or a
+  // manual toggle-close). expand() is async (it may await a real fsReadDir
+  // IPC round trip), so a fetch kicked off just before a collapse can land
+  // after it; expand() checks this token to tell whether that happened and,
+  // if so, drops its own result instead of silently re-opening the folder
+  // the user just asked to close. This matters most right after Expand All,
+  // which can leave many such fetches in flight at once.
+  const collapseTokenRef = useRef(0);
 
   // Skip the initial value (0 / undefined) so a future restore-on-mount of
   // expanded state wouldn't be immediately collapsed.
   useEffect(() => {
     if (collapseSignal) {
+      collapseTokenRef.current += 1;
       setExpanded(false);
       setIsExpandingAll(false);
     }
@@ -122,8 +131,14 @@ function TreeNode({ entry, depth, onReloadParent, collapseSignal, expandSignal }
     if (!entry.is_dir) {
       return;
     }
+    const token = collapseTokenRef.current;
     if (children === null) {
       await reloadChildren();
+    }
+    if (collapseTokenRef.current !== token) {
+      // Collapsed (collapse-all or a manual toggle) while this fetch was in
+      // flight; respect that instead of re-opening behind the user's back.
+      return;
     }
     setExpanded(true);
   }
@@ -137,6 +152,7 @@ function TreeNode({ entry, depth, onReloadParent, collapseSignal, expandSignal }
       return;
     }
     if (expanded) {
+      collapseTokenRef.current += 1;
       setExpanded(false);
       setIsExpandingAll(false);
       return;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render } from "@testing-library/react";
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import { FileTree } from "./FileTree";
 import { useTabsStore } from "@/stores/tabsStore";
 
@@ -103,6 +103,44 @@ describe("FileTree collapse-all", () => {
     rerender(
       <FileTree entries={entries} onReloadRoot={() => {}} collapseSignal={1} />,
     );
+    expect(screen.queryByText("child.ts")).not.toBeInTheDocument();
+  });
+
+  it("does not re-expand a folder whose expand-all fetch is still in flight when collapse-all fires", async () => {
+    const { fsReadDir } = await import("./lib/fsBridge");
+    let resolveFetch!: (entries: { name: string; path: string; is_dir: boolean; size: number }[]) => void;
+    const pending = new Promise<{ name: string; path: string; is_dir: boolean; size: number }[]>(
+      (resolve) => {
+        resolveFetch = resolve;
+      },
+    );
+    vi.mocked(fsReadDir).mockReturnValue(pending);
+
+    const entries = [{ name: "dir", path: "/p/dir", is_dir: true, size: 0 }];
+    const { rerender } = render(
+      <FileTree entries={entries} onReloadRoot={() => {}} collapseSignal={0} expandSignal={0} />,
+    );
+
+    // Expand-all fires, kicking off a fetch for "dir" that we hold pending
+    // (mirroring a real, slower Tauri IPC round trip).
+    rerender(
+      <FileTree entries={entries} onReloadRoot={() => {}} collapseSignal={0} expandSignal={1} />,
+    );
+
+    // Collapse-all fires before that fetch resolves.
+    rerender(
+      <FileTree entries={entries} onReloadRoot={() => {}} collapseSignal={1} expandSignal={1} />,
+    );
+
+    // The stale fetch lands after the collapse.
+    await act(async () => {
+      resolveFetch([{ name: "child.ts", path: "/p/dir/child.ts", is_dir: false, size: 0 }]);
+      await pending;
+    });
+
+    // The user already asked to collapse everything; a fetch that was in
+    // flight at that moment shouldn't silently re-open the folder once it
+    // lands.
     expect(screen.queryByText("child.ts")).not.toBeInTheDocument();
   });
 });
