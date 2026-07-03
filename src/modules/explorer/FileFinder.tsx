@@ -74,10 +74,30 @@ export function FileFinder({ root, onClose }: FileFinderProps) {
   );
   const showRecent = query === "" && recentResults.length > 0;
 
-  const results = useMemo(
-    () => (showRecent ? recentResults : fuzzyRank(query, files).slice(0, 50)),
-    [query, files, showRecent, recentResults],
-  );
+  // Match against each file's path *relative to the workspace root*, not the
+  // raw absolute path `fsListFiles` returns. Matching the absolute path lets
+  // segments entirely outside the project (e.g. "Documents" in the user's
+  // home directory, which already contains "d","o","c","s" in order followed
+  // by a "/") satisfy a query like "docs/" for every single file in the
+  // workspace, regardless of where it actually lives relative to the root.
+  const { relativePaths, relativeToPath } = useMemo(() => {
+    const paths: string[] = [];
+    const toPath = new Map<string, string>();
+    for (const path of files) {
+      const relative = relativePath(path, root);
+      paths.push(relative);
+      toPath.set(relative, path);
+    }
+    return { relativePaths: paths, relativeToPath: toPath };
+  }, [files, root]);
+
+  const results = useMemo(() => {
+    if (showRecent) {
+      return recentResults;
+    }
+    const rankedRelatives = fuzzyRank(query, relativePaths).slice(0, 50);
+    return rankedRelatives.map((relative) => relativeToPath.get(relative)!);
+  }, [query, relativePaths, relativeToPath, showRecent, recentResults]);
 
   // The result set changes on every keystroke; keep the highlighted row
   // pinned to the top match instead of an index that now points elsewhere.

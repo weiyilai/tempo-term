@@ -233,6 +233,26 @@ describe("FileFinder result rows", () => {
     expect(screen.getByText("src/modules")).toBeInTheDocument();
   });
 
+  it("does not match a query against the workspace root's own absolute path prefix", async () => {
+    // "Documents" (a segment of the root's absolute path, outside the
+    // project) already contains "d","o","c","s" in order followed by a "/" —
+    // matching against the raw absolute path would make "docs/" match every
+    // file in the workspace regardless of its actual relative path.
+    const { fsListFiles } = await import("./lib/fsBridge");
+    vi.mocked(fsListFiles).mockResolvedValueOnce([
+      "/Users/muki/Documents/project/src/App.tsx",
+      "/Users/muki/Documents/project/docs/guide.md",
+    ]);
+
+    render(<FileFinder root="/Users/muki/Documents/project" onClose={() => {}} />);
+    await waitFor(() => screen.getByText("App.tsx"));
+
+    fireEvent.change(screen.getByLabelText("findFiles"), { target: { value: "docs/" } });
+
+    await waitFor(() => screen.getByText("guide.md"));
+    expect(screen.queryByText("App.tsx")).toBeNull();
+  });
+
   it("shows a loading state instead of 'no matches' while the file list is still loading", async () => {
     const { fsListFiles } = await import("./lib/fsBridge");
     let resolveList: (list: string[]) => void = () => {};
