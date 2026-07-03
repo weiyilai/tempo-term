@@ -429,8 +429,8 @@ export function CommitDetailsPanel({ repo, selection, onClose, labels }: CommitD
                   <DiffView lines={diffLines} emptyLabel={labels.noDiff} />
                 ) : (
                   <DiffExplain
-                    key={`${singleCommit!.hash}|${selectedFile}`}
-                    commitHash={singleCommit!.hash}
+                    key={`${singleCommit?.hash ?? ""}|${selectedFile}`}
+                    commitHash={singleCommit?.hash ?? ""}
                     file={selectedFile}
                     diffText={diffText}
                     providerId={providerId}
