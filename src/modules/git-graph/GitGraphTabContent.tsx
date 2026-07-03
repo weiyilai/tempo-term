@@ -25,6 +25,8 @@ import {
   gitRevert,
   gitTagCreate,
   gitTagDelete,
+  gitWorktreeList,
+  type WorktreeItem,
 } from "./lib/gitGraphBridge";
 import { GitGraphToolbar, type GitGraphToolbarLabels } from "./GitGraphToolbar";
 import { usePendingGraphSelectionStore } from "./lib/pendingGraphSelectionStore";
@@ -70,6 +72,7 @@ export function GitGraphTabContent() {
   const [resolved, setResolved] = useState(false);
   const [commits, setCommits] = useState<CommitNode[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [worktrees, setWorktrees] = useState<WorktreeItem[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [limit, setLimit] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<CommitNode | null>(null);
@@ -155,6 +158,38 @@ export function GitGraphTabContent() {
       cancelled = true;
     };
   }, [rootPath]);
+
+  // The worktree set only changes on external `git worktree add/remove`, so
+  // fetch once per resolved repo; a failure (not a repo) just hides the
+  // selector, matching the toolbar's other optional data.
+  useEffect(() => {
+    if (!repo) {
+      setWorktrees([]);
+      return;
+    }
+    let cancelled = false;
+    gitWorktreeList(repo)
+      .then((list) => {
+        if (!cancelled) {
+          setWorktrees(list);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWorktrees([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [repo]);
+
+  const handleSelectWorktree = useCallback((path: string) => {
+    // Switching worktree = switching the app's workspace root; the rootPath
+    // effect above re-resolves the repo and reloads everything, and the
+    // sidebar / file explorer follow the same store.
+    useWorkspaceStore.getState().setRoot(path);
+  }, []);
 
   // Initial load, and reload whenever a display option changes.
   useEffect(() => {
@@ -313,6 +348,7 @@ export function GitGraphTabContent() {
     commitOrder: t("toolbar.commitOrder"),
     orderDate: t("toolbar.orderDate"),
     orderTopo: t("toolbar.orderTopo"),
+    worktree: t("toolbar.worktree"),
   };
 
   const persistDetailsHeight = useCallback(() => {
@@ -522,6 +558,9 @@ export function GitGraphTabContent() {
           fetching={fetching}
           refreshing={busy}
           currentBranch={currentBranch}
+          worktrees={worktrees}
+          currentWorktreePath={repo}
+          onSelectWorktree={handleSelectWorktree}
           labels={toolbarLabels}
         />
       </div>

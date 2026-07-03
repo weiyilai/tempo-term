@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { Combobox } from "@/components/Combobox";
 import { Tooltip } from "@/components/Tooltip";
+import type { WorktreeItem } from "./lib/gitGraphBridge";
 import type { Branch, CommitOrder } from "./types";
 
 // Below this measured toolbar width the layout switches to compact: the action
@@ -17,6 +18,40 @@ import type { Branch, CommitOrder } from "./types";
 // row (branch label + combobox + remote checkbox + four icons + HEAD text) just
 // begins to crowd in a split panel.
 const COMPACT_WIDTH = 620;
+
+/** Last path segment; handles both / and \ separators (git on Windows may
+ * print either). */
+function worktreeBasename(path: string): string {
+  const segments = path.split(/[\\/]/).filter(Boolean);
+  return segments[segments.length - 1] ?? path;
+}
+
+interface WorktreeOption {
+  label: string;
+  path: string;
+}
+
+/** "basename (branch)" per worktree; colliding labels fall back to the full
+ * path so every Combobox option string stays unique (selection maps back by
+ * string value). */
+function buildWorktreeOptions(worktrees: WorktreeItem[]): WorktreeOption[] {
+  const base = worktrees.map((w) => ({
+    label: w.branch ? `${worktreeBasename(w.path)} (${w.branch})` : worktreeBasename(w.path),
+    path: w.path,
+  }));
+  const counts = new Map<string, number>();
+  for (const option of base) {
+    counts.set(option.label, (counts.get(option.label) ?? 0) + 1);
+  }
+  return base.map((option) =>
+    (counts.get(option.label) ?? 0) > 1 ? { ...option, label: option.path } : option,
+  );
+}
+
+/** Trailing-slash-insensitive path equality (resolve_repo trims, git doesn't). */
+function samePath(a: string, b: string): boolean {
+  return a.replace(/[\\/]+$/, "") === b.replace(/[\\/]+$/, "");
+}
 
 export interface GitGraphToolbarLabels {
   branches: string;
@@ -36,6 +71,7 @@ export interface GitGraphToolbarLabels {
   commitOrder: string;
   orderDate: string;
   orderTopo: string;
+  worktree: string;
 }
 
 interface GitGraphToolbarProps {
@@ -58,6 +94,9 @@ interface GitGraphToolbarProps {
   fetching: boolean;
   refreshing: boolean;
   currentBranch: string;
+  worktrees: WorktreeItem[];
+  currentWorktreePath: string | null;
+  onSelectWorktree: (path: string) => void;
   labels: GitGraphToolbarLabels;
 }
 
@@ -81,6 +120,9 @@ export function GitGraphToolbar({
   fetching,
   refreshing,
   currentBranch,
+  worktrees,
+  currentWorktreePath,
+  onSelectWorktree,
   labels,
 }: GitGraphToolbarProps) {
   const [optionsOpen, setOptionsOpen] = useState(false);
@@ -156,6 +198,14 @@ export function GitGraphToolbar({
   // combobox steps aside until search closes.
   const showBranchControls = !(isCompact && searchOpen);
 
+  const worktreeOptions = buildWorktreeOptions(worktrees);
+  const currentWorktree =
+    currentWorktreePath === null
+      ? undefined
+      : worktreeOptions.find((o) => samePath(o.path, currentWorktreePath));
+  // A single-worktree repo (the common case) hides the control entirely.
+  const showWorktreeControls = showBranchControls && worktreeOptions.length > 1;
+
   return (
     <div
       ref={rootRef}
@@ -172,6 +222,27 @@ export function GitGraphToolbar({
               onChange={(v) => onSelectBranch(v === labels.showAll ? null : v)}
               ariaLabel={labels.branches}
               className="w-48"
+            />
+          </div>
+        )}
+
+        {showWorktreeControls && (
+          <div className="flex min-w-0 items-center gap-1.5 text-xs text-fg-subtle">
+            <span className="shrink-0">{labels.worktree}:</span>
+            <Combobox
+              value={
+                currentWorktree?.label ??
+                (currentWorktreePath ? worktreeBasename(currentWorktreePath) : "")
+              }
+              options={worktreeOptions.map((o) => o.label)}
+              onChange={(label) => {
+                const picked = worktreeOptions.find((o) => o.label === label);
+                if (picked && (!currentWorktree || picked.path !== currentWorktree.path)) {
+                  onSelectWorktree(picked.path);
+                }
+              }}
+              ariaLabel={labels.worktree}
+              className="w-44"
             />
           </div>
         )}

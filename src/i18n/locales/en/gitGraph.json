@@ -24,7 +24,8 @@
     "more": "More",
     "commitOrder": "Commit order",
     "orderDate": "Date order",
-    "orderTopo": "Topological order"
+    "orderTopo": "Topological order",
+    "worktree": "Worktree"
   },
   "details": {
     "author": "Author",

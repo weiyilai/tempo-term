@@ -56,6 +56,7 @@ const labels: GitGraphToolbarLabels = {
   commitOrder: "Commit order",
   orderDate: "Date order",
   orderTopo: "Topological order",
+  worktree: "Worktree",
 };
 
 const branches: Branch[] = [
@@ -84,6 +85,9 @@ function renderToolbar(overrides: Partial<Parameters<typeof GitGraphToolbar>[0]>
     fetching: false,
     refreshing: false,
     currentBranch: "master",
+    worktrees: [],
+    currentWorktreePath: null,
+    onSelectWorktree: vi.fn(),
     labels,
     ...overrides,
   };
@@ -211,5 +215,65 @@ describe("GitGraphToolbar commit ordering", () => {
 
     fireEvent.click(screen.getByText(labels.orderTopo));
     expect(props.onChangeOrder).toHaveBeenCalledWith("topo");
+  });
+});
+
+describe("GitGraphToolbar worktree selector", () => {
+  const twoWorktrees = [
+    { path: "/repos/app", branch: "master" },
+    { path: "/repos/app-dev", branch: "feature" },
+  ];
+
+  it("is hidden when the repo has a single worktree", () => {
+    renderToolbar({
+      worktrees: [{ path: "/repos/app", branch: "master" }],
+      currentWorktreePath: "/repos/app",
+    });
+
+    expect(screen.queryByText(`${labels.worktree}:`)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(labels.worktree)).not.toBeInTheDocument();
+  });
+
+  it("shows the current worktree as the selected value when there are several", () => {
+    renderToolbar({ worktrees: twoWorktrees, currentWorktreePath: "/repos/app" });
+
+    expect(screen.getByText(`${labels.worktree}:`)).toBeInTheDocument();
+    expect(screen.getAllByLabelText(labels.worktree)[0]).toHaveTextContent("app (master)");
+  });
+
+  it("selecting another worktree reports its path", () => {
+    const props = renderToolbar({
+      worktrees: twoWorktrees,
+      currentWorktreePath: "/repos/app",
+    });
+
+    fireEvent.click(screen.getAllByLabelText(labels.worktree)[0]);
+    fireEvent.click(screen.getByText("app-dev (feature)"));
+
+    expect(props.onSelectWorktree).toHaveBeenCalledWith("/repos/app-dev");
+  });
+
+  it("re-picking the current worktree does not fire a switch", () => {
+    const props = renderToolbar({
+      worktrees: twoWorktrees,
+      currentWorktreePath: "/repos/app",
+    });
+
+    fireEvent.click(screen.getAllByLabelText(labels.worktree)[0]);
+    fireEvent.click(screen.getByRole("button", { name: /app \(master\)/ }));
+
+    expect(props.onSelectWorktree).not.toHaveBeenCalled();
+  });
+
+  it("falls back to full paths when two labels would collide", () => {
+    renderToolbar({
+      worktrees: [
+        { path: "/a/repo", branch: "main" },
+        { path: "/b/repo", branch: "main" },
+      ],
+      currentWorktreePath: "/a/repo",
+    });
+
+    expect(screen.getAllByLabelText(labels.worktree)[0]).toHaveTextContent("/a/repo");
   });
 });

@@ -15,9 +15,10 @@ vi.mock("./lib/gitGraphBridge", () => ({
   gitFetch: vi.fn(),
   gitCommitDetails: vi.fn().mockResolvedValue({ message: "", files: [] }),
   gitCommitFileDiff: vi.fn().mockResolvedValue(""),
+  gitWorktreeList: vi.fn().mockResolvedValue([]),
 }));
 
-import { gitGraphLog } from "./lib/gitGraphBridge";
+import { gitGraphLog, gitWorktreeList } from "./lib/gitGraphBridge";
 
 function commitList(hashes: string[], hasMore: boolean) {
   return {
@@ -36,6 +37,7 @@ function commitList(hashes: string[], hasMore: boolean) {
 describe("GitGraphTabContent pending commit selection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(gitWorktreeList).mockResolvedValue([]);
     usePendingGraphSelectionStore.setState({ hash: null });
     useWorkspaceStore.getState().setRoot("/repo");
   });
@@ -145,5 +147,38 @@ describe("GitGraphTabContent pending commit selection", () => {
 
     await waitFor(() => expect(screen.getAllByText("eee5555").length).toBeGreaterThan(0));
     expect(usePendingGraphSelectionStore.getState().hash).toBeNull();
+  });
+});
+
+describe("GitGraphTabContent worktree selector wiring", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    usePendingGraphSelectionStore.setState({ hash: null });
+    useWorkspaceStore.getState().setRoot("/repo");
+  });
+
+  it("switches the workspace root when another worktree is picked", async () => {
+    vi.mocked(gitGraphLog).mockResolvedValue(commitList(["aaa1111"], false));
+    vi.mocked(gitWorktreeList).mockResolvedValue([
+      { path: "/repo", branch: "master" },
+      { path: "/repo-dev", branch: "feature" },
+    ]);
+
+    render(<GitGraphTabContent />);
+
+    fireEvent.click((await screen.findAllByLabelText("Worktree"))[0]);
+    fireEvent.click(screen.getByText("repo-dev (feature)"));
+
+    await waitFor(() => expect(useWorkspaceStore.getState().rootPath).toBe("/repo-dev"));
+  });
+
+  it("hides the selector when listing worktrees fails", async () => {
+    vi.mocked(gitGraphLog).mockResolvedValue(commitList(["aaa1111"], false));
+    vi.mocked(gitWorktreeList).mockRejectedValue(new Error("not a repo"));
+
+    render(<GitGraphTabContent />);
+    await screen.findByText("msg aaa1111");
+
+    expect(screen.queryByLabelText("Worktree")).not.toBeInTheDocument();
   });
 });
