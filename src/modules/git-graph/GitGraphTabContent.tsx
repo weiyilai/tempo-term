@@ -330,6 +330,30 @@ export function GitGraphTabContent() {
     }
   }, [repo, limit, reload, options.branch, options.includeRemotes, options.includeTags, options.includeStashes, options.order]);
 
+  // Shared by the ref context menu and the toolbar's branch menu: prompt for a
+  // local name, then create the tracking branch.
+  const openCheckoutRemoteModal = useCallback(
+    (refName: string) => {
+      const { branch } = splitRemoteRef(refName);
+      setModal({
+        title: t("modal.checkoutRemote.title"),
+        confirmLabel: t("modal.checkoutRemote.confirm"),
+        fields: [
+          {
+            key: "name",
+            label: t("modal.branchName"),
+            placeholder: t("modal.branchPlaceholder"),
+            required: true,
+            defaultValue: branch,
+          },
+        ],
+        onConfirm: (values) =>
+          void runAction(() => gitBranchCheckoutTrack(repo!, values.name, refName)),
+      });
+    },
+    [t, runAction, repo],
+  );
+
   const toolbarLabels: GitGraphToolbarLabels = {
     branches: t("toolbar.branches"),
     showAll: t("toolbar.showAll"),
@@ -349,6 +373,7 @@ export function GitGraphTabContent() {
     orderDate: t("toolbar.orderDate"),
     orderTopo: t("toolbar.orderTopo"),
     worktree: t("toolbar.worktree"),
+    switchBranch: t("toolbar.switchBranch"),
   };
 
   const persistDetailsHeight = useCallback(() => {
@@ -475,24 +500,7 @@ export function GitGraphTabContent() {
         onMerge: () => void runAction(() => gitMerge(repo!, ref.name)),
         onDeleteBranch: () => void runAction(() => gitBranchDelete(repo!, ref.name, true)),
         onDeleteTag: () => void runAction(() => gitTagDelete(repo!, ref.name)),
-        onCheckoutRemote: () => {
-          const { branch } = splitRemoteRef(ref.name);
-          setModal({
-            title: t("modal.checkoutRemote.title"),
-            confirmLabel: t("modal.checkoutRemote.confirm"),
-            fields: [
-              {
-                key: "name",
-                label: t("modal.branchName"),
-                placeholder: t("modal.branchPlaceholder"),
-                required: true,
-                defaultValue: branch,
-              },
-            ],
-            onConfirm: (values) =>
-              void runAction(() => gitBranchCheckoutTrack(repo!, values.name, ref.name)),
-          });
-        },
+        onCheckoutRemote: () => openCheckoutRemoteModal(ref.name),
         onMergeRemote: () => void runAction(() => gitMerge(repo!, ref.name)),
         onPull: () => {
           const { remote, branch } = splitRemoteRef(ref.name);
@@ -561,6 +569,8 @@ export function GitGraphTabContent() {
           worktrees={worktrees}
           currentWorktreePath={repo}
           onSelectWorktree={handleSelectWorktree}
+          onCheckoutBranch={(name) => void runAction(() => gitBranchCheckout(repo!, name))}
+          onCheckoutRemoteBranch={openCheckoutRemoteModal}
           labels={toolbarLabels}
         />
       </div>

@@ -57,10 +57,12 @@ const labels: GitGraphToolbarLabels = {
   orderDate: "Date order",
   orderTopo: "Topological order",
   worktree: "Worktree",
+  switchBranch: "Switch Branch",
 };
 
 const branches: Branch[] = [
   { name: "master", isRemote: false } as Branch,
+  { name: "dev", isRemote: false } as Branch,
   { name: "origin/master", isRemote: true } as Branch,
 ];
 
@@ -88,6 +90,8 @@ function renderToolbar(overrides: Partial<Parameters<typeof GitGraphToolbar>[0]>
     worktrees: [],
     currentWorktreePath: null,
     onSelectWorktree: vi.fn(),
+    onCheckoutBranch: vi.fn(),
+    onCheckoutRemoteBranch: vi.fn(),
     labels,
     ...overrides,
   };
@@ -275,5 +279,58 @@ describe("GitGraphToolbar worktree selector", () => {
     });
 
     expect(screen.getAllByLabelText(labels.worktree)[0]).toHaveTextContent("/a/repo");
+  });
+});
+
+describe("GitGraphToolbar branch-switch menu", () => {
+  it("opens from the HEAD button and lists local branches with the current one checked", () => {
+    renderToolbar({ currentBranch: "master" });
+
+    fireEvent.click(screen.getByRole("button", { name: labels.switchBranch }));
+
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getByText("master")).toBeInTheDocument();
+    expect(within(menu).getByText("dev")).toBeInTheDocument();
+    expect(within(menu).getByText("origin/master")).toBeInTheDocument();
+  });
+
+  it("clicking another local branch checks it out and closes the menu", () => {
+    const props = renderToolbar({ currentBranch: "master" });
+
+    fireEvent.click(screen.getByRole("button", { name: labels.switchBranch }));
+    fireEvent.click(within(screen.getByRole("menu")).getByText("dev"));
+
+    expect(props.onCheckoutBranch).toHaveBeenCalledWith("dev");
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("clicking the current branch closes without checking out", () => {
+    const props = renderToolbar({ currentBranch: "master" });
+
+    fireEvent.click(screen.getByRole("button", { name: labels.switchBranch }));
+    fireEvent.click(within(screen.getByRole("menu")).getByText("master"));
+
+    expect(props.onCheckoutBranch).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("clicking a remote branch routes to the tracking flow", () => {
+    const props = renderToolbar({ currentBranch: "master" });
+
+    fireEvent.click(screen.getByRole("button", { name: labels.switchBranch }));
+    fireEvent.click(within(screen.getByRole("menu")).getByText("origin/master"));
+
+    expect(props.onCheckoutRemoteBranch).toHaveBeenCalledWith("origin/master");
+  });
+
+  it("compact mode reaches the same menu through the overflow HEAD row", () => {
+    const props = renderToolbar({ currentBranch: "master" });
+    setToolbarWidth(360);
+
+    fireEvent.click(screen.getByLabelText(labels.more));
+    fireEvent.click(screen.getByRole("button", { name: labels.switchBranch }));
+    fireEvent.click(within(screen.getByRole("menu")).getByText("dev"));
+
+    expect(props.onCheckoutBranch).toHaveBeenCalledWith("dev");
   });
 });

@@ -25,7 +25,8 @@
     "commitOrder": "排序方式",
     "orderDate": "日期順序",
     "orderTopo": "拓樸順序",
-    "worktree": "Worktree"
+    "worktree": "Worktree",
+    "switchBranch": "切換分支"
   },
   "details": {
     "author": "作者",

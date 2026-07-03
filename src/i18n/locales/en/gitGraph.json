@@ -25,7 +25,8 @@
     "commitOrder": "Commit order",
     "orderDate": "Date order",
     "orderTopo": "Topological order",
-    "worktree": "Worktree"
+    "worktree": "Worktree",
+    "switchBranch": "Switch Branch"
   },
   "details": {
     "author": "Author",
