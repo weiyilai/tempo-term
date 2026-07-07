@@ -48,7 +48,8 @@
     "notes": "筆記",
     "gitGraph": "Git 線圖",
     "settings": "設定",
-    "connections": "SSH 連線"
+    "connections": "SSH 連線",
+    "sessions": "AI 對話"
   },
   "statusBar": {
     "ready": "就緒",
@@ -234,7 +235,8 @@
       "editor": "檔案",
       "note": "筆記",
       "preview": "網頁預覽",
-      "git-graph": "Git 線圖"
+      "git-graph": "Git 線圖",
+      "sessions": "AI 對話"
     },
     "spaces": "群組",
     "newSpace": "新增群組",
@@ -253,6 +255,46 @@
       "idle": "等待輸入",
       "thinking": "思考中",
       "waiting-approval": "等待批准"
+    }
+  },
+  "sessions": {
+    "live": "進行中",
+    "pinned": "已釘選",
+    "searchPlaceholder": "搜尋對話…",
+    "all": "全部",
+    "empty": "沒有符合的對話",
+    "messages": "{{count}} 則訊息",
+    "resume": "接續對話",
+    "pin": "釘選",
+    "unpin": "取消釘選",
+    "selectPrompt": "從側邊欄選一場對話",
+    "resumeUnavailable": "這個 agent 不支援接續",
+    "indexing": "正在建立索引…",
+    "totalCount": "已索引 {{count}} 場對話",
+    "loading": "正在載入對話記錄…",
+    "loadError": "無法載入這場對話記錄",
+    "agents": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "antigravity": "Antigravity"
+    },
+    "roles": {
+      "user": "你",
+      "assistant": "Assistant",
+      "tool": "工具",
+      "system": "系統"
+    },
+    "time": {
+      "justNow": "剛剛",
+      "minutesAgo": "{{count}} 分鐘前",
+      "hoursAgo": "{{count}} 小時前",
+      "daysAgo": "{{count}} 天前"
+    },
+    "injected": {
+      "teammate": "協作訊息",
+      "system-reminder": "系統提醒",
+      "task-notification": "背景任務通知",
+      "command": "指令"
     }
   }
 }

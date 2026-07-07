@@ -48,7 +48,8 @@
     "notes": "Notes",
     "gitGraph": "Git Graph",
     "settings": "Settings",
-    "connections": "Connections"
+    "connections": "Connections",
+    "sessions": "AI Sessions"
   },
   "statusBar": {
     "ready": "Ready",
@@ -234,7 +235,8 @@
       "editor": "File",
       "note": "Note",
       "preview": "Preview",
-      "git-graph": "Git Graph"
+      "git-graph": "Git Graph",
+      "sessions": "AI Sessions"
     },
     "spaces": "Groups",
     "newSpace": "New group",
@@ -253,6 +255,46 @@
       "idle": "Needs Input",
       "thinking": "Thinking",
       "waiting-approval": "Needs Approval"
+    }
+  },
+  "sessions": {
+    "live": "Live",
+    "pinned": "Pinned",
+    "searchPlaceholder": "Search sessions…",
+    "all": "All",
+    "empty": "No sessions found",
+    "messages": "{{count}} msgs",
+    "resume": "Resume",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "selectPrompt": "Select a session from the sidebar",
+    "resumeUnavailable": "Resume is not available for this agent",
+    "indexing": "Indexing sessions…",
+    "totalCount": "{{count}} sessions indexed",
+    "loading": "Loading transcript…",
+    "loadError": "Couldn't load this transcript",
+    "agents": {
+      "claude": "Claude",
+      "codex": "Codex",
+      "antigravity": "Antigravity"
+    },
+    "roles": {
+      "user": "You",
+      "assistant": "Assistant",
+      "tool": "Tool",
+      "system": "System"
+    },
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
+    },
+    "injected": {
+      "teammate": "Teammate message",
+      "system-reminder": "System reminder",
+      "task-notification": "Task notification",
+      "command": "Command"
     }
   }
 }
