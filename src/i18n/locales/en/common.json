@@ -262,6 +262,8 @@
     "pinned": "Pinned",
     "searchPlaceholder": "Search sessions…",
     "all": "All",
+    "modelFilterAll": "All models",
+    "modelFilterLabel": "Filter by model",
     "empty": "No sessions found",
     "messages": "{{count}} msgs",
     "resume": "Resume",
@@ -276,6 +278,9 @@
     "deleteError": "Could not move the files to the Trash",
     "export": "Export",
     "exportError": "Could not export the transcript",
+    "commits": {
+      "title": "Commits during this session"
+    },
     "agents": {
       "claude": "Claude",
       "codex": "Codex",
@@ -305,6 +310,7 @@
       "range90": "90d",
       "range365": "1y",
       "rangeAll": "All",
+      "exportCsv": "Export CSV",
       "cards": {
         "sessions": "Sessions",
         "messages": "Messages",
@@ -339,6 +345,16 @@
       "modelsTitle": "Model usage",
       "modelsEmpty": "No model data in this range",
       "modelsOthers": "Others"
+    },
+    "project": {
+      "back": "Back",
+      "openTerminal": "Open terminal here",
+      "sessions": "Sessions",
+      "messages": "Messages",
+      "tokens": "Output tokens",
+      "activeDays": "Active days",
+      "topModel": "Top model",
+      "recent": "Recent sessions"
     }
   }
 }

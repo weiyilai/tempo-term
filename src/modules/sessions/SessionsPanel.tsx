@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { History, LayoutDashboard, Pin, PinOff, Play, Search, Trash2 } from "lucide-react";
 import { Tooltip } from "@/components/Tooltip";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Combobox } from "@/components/Combobox";
 import { useTabsStore } from "@/stores/tabsStore";
 import { useSessionStatusStore } from "@/modules/claude-progress/lib/sessionStatusStore";
 import { onSessionsUpdated, type SessionAgent, type SessionSummary } from "./lib/sessionsBridge";
@@ -105,6 +106,7 @@ interface SessionRowProps {
 function SessionRow({ session, selected }: SessionRowProps) {
   const { t } = useTranslation();
   const select = useSessionsStore((s) => s.select);
+  const selectProject = useSessionsStore((s) => s.selectProject);
   const togglePin = useSessionsStore((s) => s.togglePin);
   const openSessionsTab = useTabsStore((s) => s.openSessionsTab);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -162,7 +164,44 @@ function SessionRow({ session, selected }: SessionRowProps) {
               </span>
             </div>
             <div className="truncate text-xs text-fg-subtle">
-              {basename(session.project_cwd)} · {formatRelativeTime(session.ended_at, t)} ·{" "}
+              {/* Nested inside the row's own select-session button, so a click
+                  here must stop propagation or it would also select the
+                  session; role="button" + a keydown handler keep it reachable
+                  from the keyboard despite not being a real <button> (which
+                  can't nest inside another button). An empty cwd has nothing
+                  to route to (selectProject("") would fall through to the
+                  dashboard), so it's skipped entirely rather than rendered as
+                  a no-op link. */}
+              {session.project_cwd && (
+                <>
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (session.project_cwd) {
+                        selectProject(session.project_cwd);
+                        openSessionsTab();
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (session.project_cwd) {
+                          selectProject(session.project_cwd);
+                          openSessionsTab();
+                        }
+                      }
+                    }}
+                    className="hover:text-fg hover:underline"
+                  >
+                    {basename(session.project_cwd)}
+                  </span>{" "}
+                  ·{" "}
+                </>
+              )}
+              {formatRelativeTime(session.ended_at, t)} ·{" "}
               {t("sessions.messages", { count: session.message_count })}
             </div>
           </div>
@@ -238,9 +277,11 @@ export function SessionsPanel() {
   const loaded = useSessionsStore((s) => s.loaded);
   const query = useSessionsStore((s) => s.query);
   const agentFilter = useSessionsStore((s) => s.agentFilter);
+  const modelFilter = useSessionsStore((s) => s.modelFilter);
   const selectedId = useSessionsStore((s) => s.selectedId);
   const setQuery = useSessionsStore((s) => s.setQuery);
   const setAgentFilter = useSessionsStore((s) => s.setAgentFilter);
+  const setModelFilter = useSessionsStore((s) => s.setModelFilter);
   const select = useSessionsStore((s) => s.select);
   const openSessionsTab = useTabsStore((s) => s.openSessionsTab);
 
@@ -269,7 +310,34 @@ export function SessionsPanel() {
     };
   }, []);
 
-  const { pinned, history } = visibleSessions(sessions, query, agentFilter);
+  // Distinct non-null models seen across the loaded sessions, "all" first.
+  // The dropdown is only worth showing once there's actually a choice to make.
+  const modelOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of sessions) if (s.model) set.add(s.model);
+    return ["all", ...[...set].sort()];
+  }, [sessions]);
+
+  // A selected model can drop out of the option list (its only session got
+  // deleted or a refresh reshuffled the data). Once that happens the dropdown
+  // that would let the user pick "all" again is hidden too (see the
+  // `modelOptions.length > 1` gate below), so the list would otherwise be
+  // stranded empty with no on-screen way back. Reset instead of leaving it
+  // dangling.
+  useEffect(() => {
+    if (modelFilter !== "all" && !modelOptions.includes(modelFilter)) {
+      setModelFilter("all");
+    }
+  }, [modelOptions, modelFilter, setModelFilter]);
+
+  // Combobox takes a flat string list where the option string doubles as its
+  // own label (see GitGraphToolbar's branch picker for the same pattern), so
+  // "all" is displayed as its translated label and mapped back on change.
+  const modelFilterAllLabel = t("sessions.modelFilterAll");
+  const modelComboboxOptions = modelOptions.map((m) => (m === "all" ? modelFilterAllLabel : m));
+  const modelComboboxValue = modelFilter === "all" ? modelFilterAllLabel : modelFilter;
+
+  const { pinned, history } = visibleSessions(sessions, query, agentFilter, modelFilter);
   const isEmpty = pinned.length === 0 && history.length === 0;
 
   return (
@@ -322,6 +390,16 @@ export function SessionsPanel() {
               {key === "all" ? t("sessions.all") : t(`sessions.agents.${key}`)}
             </button>
           ))}
+          {modelOptions.length > 1 && (
+            <Combobox
+              value={modelComboboxValue}
+              options={modelComboboxOptions}
+              onChange={(v) => setModelFilter(v === modelFilterAllLabel ? "all" : v)}
+              ariaLabel={t("sessions.modelFilterLabel")}
+              size="sm"
+              className="ml-auto w-32"
+            />
+          )}
         </div>
       </div>
 

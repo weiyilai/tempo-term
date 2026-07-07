@@ -9,11 +9,13 @@ import { fsWriteFile } from "@/modules/explorer/lib/fsBridge";
 import { sessionsGet, type TranscriptMessage } from "./lib/sessionsBridge";
 import { useSessionsStore } from "./lib/sessionsStore";
 import { sessionsDelete, sessionsExport } from "./lib/statsBridge";
+import { gitCommitsInRange, type CommitInfo } from "@/modules/source-control/lib/gitBridge";
 import { formatRelativeTime } from "./lib/relativeTime";
 import { AGENT_BADGE_CLASS } from "./lib/agentBadge";
 import { resumeCommand, resumeSession } from "./lib/resume";
 import { slugifyTitle } from "./lib/slug";
 import { DashboardView } from "./DashboardView";
+import { ProjectView } from "./ProjectView";
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -96,8 +98,11 @@ export function SessionsTabContent() {
   const { t } = useTranslation();
   const sessions = useSessionsStore((s) => s.sessions);
   const selectedId = useSessionsStore((s) => s.selectedId);
+  const selectedProject = useSessionsStore((s) => s.selectedProject);
   const togglePin = useSessionsStore((s) => s.togglePin);
   const select = useSessionsStore((s) => s.select);
+
+  const session = sessions.find((s) => s.id === selectedId) ?? null;
 
   const [transcript, setTranscript] = useState<TranscriptMessage[]>([]);
   const [loading, setLoading] = useState(false);
@@ -111,6 +116,11 @@ export function SessionsTabContent() {
   // Same treatment for export: a failed render or a failed disk write both
   // surface here rather than silently doing nothing.
   const [exportError, setExportError] = useState(false);
+  // Commits made during the session's time window, for the correlation
+  // section below the transcript. Empty (and hidden) when the cwd isn't a
+  // git repo, or the fetch fails — same "quietly show nothing" contract as
+  // `git_commits_in_range` itself.
+  const [commits, setCommits] = useState<CommitInfo[]>([]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -155,11 +165,37 @@ export function SessionsTabContent() {
     };
   }, [selectedId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!session) {
+      setCommits([]);
+      return;
+    }
+    gitCommitsInRange(session.project_cwd, session.started_at, session.ended_at)
+      .then((c) => {
+        if (!cancelled) {
+          setCommits(c);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCommits([]);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Re-fetch when any input to the query changes, not just the session id:
+    // an active session's `ended_at` grows as new messages arrive, so the
+    // commit window must widen with it to pick up commits made mid-session.
+  }, [session?.id, session?.project_cwd, session?.started_at, session?.ended_at]);
+
+  if (selectedProject) {
+    return <ProjectView />;
+  }
   if (!selectedId) {
     return <DashboardView />;
   }
-
-  const session = sessions.find((s) => s.id === selectedId) ?? null;
 
   // The header only ever shows the currently selected session, so a
   // successful delete always clears the selection and falls back to the
@@ -316,6 +352,22 @@ export function SessionsTabContent() {
             <TranscriptEntry key={index} message={message} />
           ))}
         </div>
+        {commits.length > 0 && (
+          <section className="mt-4 border-t border-border pt-3">
+            <h2 className="text-[11px] font-semibold uppercase tracking-wide text-fg-subtle">
+              {t("sessions.commits.title")}
+            </h2>
+            <ul className="mt-2 flex flex-col gap-1">
+              {commits.map((c) => (
+                <li key={c.id} className="flex items-baseline gap-2 text-xs">
+                  <span className="shrink-0 font-mono text-fg-subtle">{c.id}</span>
+                  <span className="min-w-0 flex-1 truncate text-fg">{c.summary}</span>
+                  <span className="shrink-0 text-fg-subtle">{c.author}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
       </div>
     </div>
   );

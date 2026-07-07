@@ -98,6 +98,7 @@ describe("SessionsPanel", () => {
       loaded: false,
       query: "",
       agentFilter: "all",
+      modelFilter: "all",
       selectedId: null,
     });
     useTabsStore.setState({ spaces: [], activeSpaceId: null, tabs: [], activeId: null });
@@ -182,6 +183,28 @@ describe("SessionsPanel", () => {
     expect(screen.queryByText("Claude session")).not.toBeInTheDocument();
   });
 
+  it("resets a stale model filter to \"all\" once its model drops out of the option list", async () => {
+    seedSessions([
+      session({ id: "a", title: "GPT session", model: "gpt-5.5" }),
+      session({ id: "b", title: "No-model session", model: null }),
+    ]);
+    await renderSettled();
+    act(() => {
+      useSessionsStore.setState({ modelFilter: "gpt-5.5" });
+    });
+
+    // Simulate a refresh (e.g. the session was deleted or re-indexed) that
+    // drops the only session carrying "gpt-5.5" out of the list, so the
+    // filter no longer matches any option.
+    act(() => {
+      useSessionsStore.setState({
+        sessions: [session({ id: "b", title: "No-model session", model: null })],
+      });
+    });
+
+    expect(useSessionsStore.getState().modelFilter).toBe("all");
+  });
+
   it("selects a session on row click", async () => {
     seedSessions([session({ id: "a", title: "Deploy script" })]);
     await renderSettled();
@@ -249,6 +272,41 @@ describe("SessionsPanel", () => {
     expect(tabs).toHaveLength(1);
     expect(tabs[0].kind).toBe("terminal");
     expect(tabs[0].cwd).toBe("/repo/app");
+  });
+
+  it("clicks the project name to open the project view without selecting the session", async () => {
+    seedSessions([
+      session({ id: "a", title: "Deploy script", project_cwd: "/Users/muki/tempo-term" }),
+    ]);
+    await renderSettled();
+
+    fireEvent.click(screen.getByText("tempo-term"));
+
+    expect(useSessionsStore.getState().selectedProject).toBe("/Users/muki/tempo-term");
+    // The row's own select(id) must not have fired.
+    expect(useSessionsStore.getState().selectedId).toBe(null);
+  });
+
+  it("activates the project name via keyboard without selecting the session", async () => {
+    seedSessions([
+      session({ id: "a", title: "Deploy script", project_cwd: "/Users/muki/tempo-term" }),
+    ]);
+    await renderSettled();
+
+    fireEvent.keyDown(screen.getByText("tempo-term"), { key: "Enter" });
+
+    expect(useSessionsStore.getState().selectedProject).toBe("/Users/muki/tempo-term");
+    expect(useSessionsStore.getState().selectedId).toBe(null);
+  });
+
+  it("renders no clickable project element when project_cwd is empty", async () => {
+    seedSessions([session({ id: "a", title: "Deploy script", project_cwd: "" })]);
+    await renderSettled();
+
+    expect(screen.queryByRole("button", { name: "" })).not.toBeInTheDocument();
+    // basename("") falls back to "" too, so there's simply nothing to click;
+    // the rest of the meta line (time · message count) still renders.
+    expect(screen.getByText(/sessions\.messages:0/)).toBeInTheDocument();
   });
 
   it("hides the resume button on rows for agents with no supported resume command", async () => {

@@ -8,7 +8,10 @@ import {
   type TopSession,
 } from "./lib/statsBridge";
 import { Tooltip } from "@/components/Tooltip";
-import { useSessionsStore } from "./lib/sessionsStore";
+import { useSessionsStore, visibleSessions } from "./lib/sessionsStore";
+import { toSessionsCsv } from "./lib/sessionsCsv";
+import { saveFile } from "@/lib/dialog";
+import { fsWriteFile } from "@/modules/explorer/lib/fsBridge";
 import { AGENT_BADGE_CLASS } from "./lib/agentBadge";
 import { heatmapLevel, heatmapMax, heatmapMonthLabels, heatmapWeeks } from "./lib/heatmap";
 import { estimateOutputCost } from "./lib/cost";
@@ -136,9 +139,10 @@ function StatCard({
 interface TopSessionRowProps {
   session: TopSession;
   onSelect: (id: string) => void;
+  onSelectProject: (cwd: string) => void;
 }
 
-function TopSessionRow({ session, onSelect }: TopSessionRowProps) {
+function TopSessionRow({ session, onSelect, onSelectProject }: TopSessionRowProps) {
   const { t } = useTranslation();
   return (
     <li>
@@ -156,7 +160,37 @@ function TopSessionRow({ session, onSelect }: TopSessionRowProps) {
               {t(`sessions.agents.${session.agent}`)}
             </span>
           </div>
-          <p className="truncate text-xs text-fg-subtle">{session.project_cwd}</p>
+          {/* Nested inside the row's own select-session button, so a click
+              here must stop propagation or it would also select the session;
+              role="button" + a keydown handler keep it reachable from the
+              keyboard despite not being a real <button> (which can't nest
+              inside another button). An empty cwd has nothing to route to
+              (onSelectProject("") would fall through to the dashboard), so
+              it's skipped entirely rather than rendered as a no-op link. */}
+          {session.project_cwd && (
+            <p
+              role="button"
+              tabIndex={0}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (session.project_cwd) {
+                  onSelectProject(session.project_cwd);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (session.project_cwd) {
+                    onSelectProject(session.project_cwd);
+                  }
+                }
+              }}
+              className="truncate text-xs text-fg-subtle hover:text-fg hover:underline"
+            >
+              {session.project_cwd}
+            </p>
+          )}
         </div>
         {/* Token counts easily reach 6-7 digits; group them for readability. */}
         <span className="shrink-0 text-xs text-fg-subtle">{session.value.toLocaleString()}</span>
@@ -176,6 +210,11 @@ function TopSessionRow({ session, onSelect }: TopSessionRowProps) {
 export function DashboardView() {
   const { t, i18n } = useTranslation();
   const select = useSessionsStore((s) => s.select);
+  const selectProject = useSessionsStore((s) => s.selectProject);
+  const sessions = useSessionsStore((s) => s.sessions);
+  const query = useSessionsStore((s) => s.query);
+  const agentFilter = useSessionsStore((s) => s.agentFilter);
+  const modelFilter = useSessionsStore((s) => s.modelFilter);
   const [range, setRange] = useState<RangeDays>(365);
   const [stats, setStats] = useState<SessionsStats>(EMPTY_STATS);
   const [topTab, setTopTab] = useState<"messages" | "tokens">("messages");
@@ -258,24 +297,46 @@ export function DashboardView() {
     return Array.from({ length: 7 }, (_, row) => fmt.format(new Date(2026, 2, 1 + row)));
   }, [locale]);
 
+  // Exports exactly the sessions currently visible under the active
+  // search/agent/model filters (not the full unfiltered index), mirroring
+  // what the sessions panel itself shows.
+  async function handleExportCsv() {
+    const { pinned, history } = visibleSessions(sessions, query, agentFilter, modelFilter);
+    const csv = toSessionsCsv([...pinned, ...history]);
+    const path = await saveFile("ai-sessions.csv", [{ name: "CSV", extensions: ["csv"] }]);
+    if (path === null) {
+      return;
+    }
+    await fsWriteFile(path, csv);
+  }
+
   return (
     <div className="h-full overflow-y-auto bg-bg-inset p-4">
       <div className="flex items-center justify-between">
         <h1 className="text-sm font-semibold text-fg">{t("sessions.dashboard.title")}</h1>
-        <div className="flex items-center gap-1">
-          {RANGE_OPTIONS.map((opt) => (
-            <button
-              key={String(opt.key)}
-              type="button"
-              aria-pressed={range === opt.key}
-              onClick={() => setRange(opt.key)}
-              className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
-                range === opt.key ? "bg-bg-elevated text-fg" : "text-fg-subtle hover:text-fg"
-              }`}
-            >
-              {t(opt.labelKey)}
-            </button>
-          ))}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            {RANGE_OPTIONS.map((opt) => (
+              <button
+                key={String(opt.key)}
+                type="button"
+                aria-pressed={range === opt.key}
+                onClick={() => setRange(opt.key)}
+                className={`rounded px-2 py-0.5 text-[11px] transition-colors ${
+                  range === opt.key ? "bg-bg-elevated text-fg" : "text-fg-subtle hover:text-fg"
+                }`}
+              >
+                {t(opt.labelKey)}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => void handleExportCsv()}
+            className="rounded border border-border px-2 py-0.5 text-[11px] text-fg-subtle transition-colors hover:text-fg"
+          >
+            {t("sessions.dashboard.exportCsv")}
+          </button>
         </div>
       </div>
 
@@ -433,7 +494,12 @@ export function DashboardView() {
           </div>
           <ul className="mt-2">
             {topSessions.map((session) => (
-              <TopSessionRow key={session.id} session={session} onSelect={select} />
+              <TopSessionRow
+                key={session.id}
+                session={session}
+                onSelect={select}
+                onSelectProject={selectProject}
+              />
             ))}
           </ul>
         </div>
