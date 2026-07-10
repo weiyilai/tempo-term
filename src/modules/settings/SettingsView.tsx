@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check } from "lucide-react";
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/i18n/config";
 import { useSettingsStore } from "@/stores/settingsStore";
+import { useUiStore } from "@/stores/uiStore";
 import { getTheme, THEMES, type AppTheme } from "@/themes/themes";
 import { FontsSettingsSection } from "./FontsSettingsSection";
 import { TerminalSettingsSection } from "./TerminalSettingsSection";
@@ -13,6 +14,10 @@ import { AboutSettingsSection } from "./AboutSettingsSection";
 
 const SECTIONS = ["appearance", "terminal", "ai", "workspace", "shortcuts", "about"] as const;
 type SectionId = typeof SECTIONS[number];
+
+function isSectionId(value: string): value is SectionId {
+  return (SECTIONS as readonly string[]).includes(value);
+}
 
 /**
  * A read-only code snippet painted in the active theme's own colours, so its
@@ -157,7 +162,29 @@ function AppearanceSection() {
 
 export function SettingsView() {
   const { t } = useTranslation("settings");
-  const [section, setSection] = useState<SectionId>("appearance");
+  // The modal unmounts SettingsView on close, so this lazy initializer re-runs
+  // on every open: land on whatever section the menu bar / File > Settings
+  // requested (e.g. Help > About), falling back to Appearance for a plain
+  // open or an id that no longer exists.
+  const [section, setSection] = useState<SectionId>(() => {
+    const requested = useUiStore.getState().settingsSection;
+    return requested && isSectionId(requested) ? requested : "appearance";
+  });
+
+  // Subscribe to the requested section reactively (not just at mount) so a
+  // deep-link (e.g. Help > Keyboard Shortcuts) still switches the active
+  // section while the modal is already open. Every non-null value is
+  // consumed and cleared immediately after applying it, so a later plain
+  // openSettings() / setSettingsOpen(true) bypass (Cmd+, or the gear icon)
+  // never replays a stale section from an earlier deep-link.
+  const requestedSection = useUiStore((s) => s.settingsSection);
+  useEffect(() => {
+    if (requestedSection === null) return;
+    if (isSectionId(requestedSection)) {
+      setSection(requestedSection);
+    }
+    useUiStore.setState({ settingsSection: null });
+  }, [requestedSection]);
 
   return (
     <div className="flex h-full w-full">

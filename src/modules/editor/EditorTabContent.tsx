@@ -13,6 +13,7 @@ import { useChatStore } from "@/modules/ai/store/chatStore";
 import { buildCompletionMessages, cleanCompletion } from "@/modules/ai/lib/completion";
 import { externalChangeAction, manualReloadAction, shouldReloadFromDisk } from "./lib/reload";
 import { onEditorFileChanged } from "./lib/editorWatch";
+import { registerEditorSaver, unregisterEditorSaver } from "./lib/editorBus";
 import { fsReadFile, fsWriteFile } from "@/modules/explorer/lib/fsBridge";
 import { MarkdownView } from "@/components/MarkdownView";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -46,9 +47,11 @@ async function requestCompletion(
 export function EditorTabContent({
   path,
   onOpenWebPreview,
+  leafId,
 }: {
   path: string;
   onOpenWebPreview?: () => void;
+  leafId: string;
 }) {
   const { t } = useTranslation("editor");
   const setBaseline = useEditorStore((s) => s.setBaseline);
@@ -143,6 +146,25 @@ export function EditorTabContent({
       // a toast surface comes later
     }
   }
+
+  // The pane that renders us doesn't put a `key` on `path` (PaneTabContent),
+  // so opening a different file in the same pane rerenders this component
+  // instance instead of remounting it. Keep the latest `save` (and thus the
+  // latest `path`) in a ref so the saver registered below never goes stale.
+  const saveRef = useRef(save);
+  useEffect(() => {
+    saveRef.current = save;
+  });
+
+  // Let the File menu's Save action (and its Cmd/Ctrl+S accelerator) reach
+  // this pane without threading a save callback through the pane tree. The
+  // wrapper is registered once per leafId and always calls through the ref,
+  // so it keeps saving whichever file is currently open even after `path`
+  // changes without a remount.
+  useEffect(() => {
+    registerEditorSaver(leafId, () => void saveRef.current());
+    return () => unregisterEditorSaver(leafId);
+  }, [leafId]);
 
   // Re-read the file from disk into the buffer (content + baseline → clean), so
   // external edits (e.g. an AI agent editing the file) show up without closing

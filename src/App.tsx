@@ -10,7 +10,7 @@ import { UpdateModal } from "@/components/UpdateModal";
 import { UpdateToast } from "@/components/UpdateToast";
 import { NotifyToast } from "@/components/NotifyToast";
 import { TabsArea } from "@/components/TabsArea";
-import { useUiStore } from "@/stores/uiStore";
+import { useUiStore, type SidebarView } from "@/stores/uiStore";
 import { useFontStore, shouldPrefetchFontReport } from "@/stores/fontStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -18,16 +18,19 @@ import { useTabsStore, tabHasDirtyEditor } from "@/stores/tabsStore";
 import { useEditorStore } from "@/modules/editor/store/editorStore";
 import { installEditorBufferSync } from "@/modules/editor/lib/syncBuffers";
 import { installEditorWatchSync } from "@/modules/editor/lib/editorWatch";
+import { saveFocusedEditor } from "@/modules/editor/lib/editorBus";
 import { computeLayout } from "@/modules/terminal/lib/terminalLayout";
 import { useWorkspaceStore } from "@/stores/workspaceStore";
 import { pruneTerminalHistory } from "@/modules/terminal/lib/terminalHistory";
 import { findPaneContent, leafIds } from "@/modules/terminal/lib/terminalLayout";
-import { getPreviewControls } from "@/modules/preview/lib/previewControls";
+import { focusedTerminalOps } from "@/modules/terminal/lib/terminalBus";
+import { getPreviewControls, type PreviewControls } from "@/modules/preview/lib/previewControls";
+import { menuCopy, menuPaste, menuSelectAll } from "@/lib/editActions";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { FileFinder } from "@/modules/explorer/FileFinder";
 import { canSearchRoot } from "@/modules/explorer/lib/fsBridge";
 import { applyTheme, getTheme } from "@/themes/themes";
-import { listen } from "@tauri-apps/api/event";
+import { listen, type Event as TauriEvent } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { useProgressStore } from "@/modules/claude-progress/lib/progressStore";
 import { useWatchSessions } from "@/modules/claude-progress/lib/useWatchSessions";
@@ -83,22 +86,51 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * Controls for the preview pane the user is currently on (active tab's focused
- * leaf), or undefined when that pane isn't a live preview. Lets the ⌘L menu
- * accelerator and ⌘[ / ⌘] shortcuts target the right preview without stealing
- * those keys from editors/terminals.
+ * Controls for the preview pane the View menu's Back/Forward items (and the
+ * `menu:preview-back` / `menu:preview-forward` events they emit) should reach:
+ * the active tab's focused leaf when it is itself a preview, otherwise the
+ * tab's first preview pane (a preview can exist in a split without holding
+ * focus — e.g. the user is typing in a sibling terminal/editor pane).
+ * undefined when the active tab has no preview pane at all.
+ *
+ * Deliberately used ONLY by the menu listeners: their `disabled` predicate
+ * (`hasPreviewPane`/`noPreview` in menuBarMenus.ts) already gates on "does this
+ * tab have a preview pane anywhere", not "is a preview focused", so the action
+ * they fire must resolve the same way or a click on an enabled menu item could
+ * silently no-op. The keydown paths below use the stricter
+ * `focusedPreviewControls` instead — see its doc comment for why.
  */
-function activePreviewControls() {
+function activePreviewControls(): PreviewControls | undefined {
   const state = useTabsStore.getState();
   const tab = state.tabs.find((tt) => tt.id === state.activeId);
   if (!tab) {
     return undefined;
   }
-  const content = findPaneContent(tab.paneTree, tab.activeLeafId);
-  if (!content || content.kind !== "preview") {
+  const focused = findPaneContent(tab.paneTree, tab.activeLeafId);
+  if (focused?.kind === "preview") {
+    return getPreviewControls(tab.activeLeafId);
+  }
+  const previewLeaf = computeLayout(tab.paneTree).find((p) => p.content.kind === "preview");
+  return previewLeaf ? getPreviewControls(previewLeaf.id) : undefined;
+}
+
+/**
+ * Controls for the preview pane the FOCUSED leaf itself is — undefined
+ * whenever the focused leaf isn't a preview, even if a preview pane exists
+ * elsewhere in the same tab's split. Used by every keydown shortcut that
+ * doubles as something else on a non-preview pane: Ctrl/Cmd+L is a terminal's
+ * "clear screen", and Cmd+[ / Cmd+] are an editor's indent/outdent. Widening
+ * this the way `activePreviewControls` does for the menu items would steal
+ * those keys from whichever pane the user is actually typing into.
+ */
+function focusedPreviewControls(): PreviewControls | undefined {
+  const state = useTabsStore.getState();
+  const tab = state.tabs.find((tt) => tt.id === state.activeId);
+  if (!tab) {
     return undefined;
   }
-  return getPreviewControls(tab.activeLeafId);
+  const focused = findPaneContent(tab.paneTree, tab.activeLeafId);
+  return focused?.kind === "preview" ? getPreviewControls(tab.activeLeafId) : undefined;
 }
 
 /**
@@ -108,11 +140,11 @@ function activePreviewControls() {
  * cycle can never leak a duplicate listener. A leaked duplicate is what made one
  * ⌘W close two tabs at once. No-op when there is no Tauri webview (unit tests).
  */
-function listenWebview(event: string, handler: () => void): () => void {
+function listenWebview<T = unknown>(event: string, handler: (event: TauriEvent<T>) => void): () => void {
   let promise: Promise<(() => void) | undefined> | null = null;
   try {
     promise = getCurrentWebview()
-      .listen(event, handler)
+      .listen<T>(event, handler)
       .catch(() => undefined);
   } catch {
     // No Tauri webview available (unit tests / web preview).
@@ -352,22 +384,24 @@ function App() {
 
       // On Windows the app's shortcut modifier is Ctrl; `metaKey` is the Windows
       // key, whose system combos (Win+D, Win+E, Win+W, …) must never trigger an
-      // app shortcut. Reject them here so neither the Windows block nor the
-      // shared Ctrl+letter handlers below can misfire on a Win+key press. (macOS
+      // app shortcut. Reject them here so neither the primary-modifier block nor
+      // the shared letter handlers below can misfire on a Win+key press. (macOS
       // uses Cmd = metaKey, so this is Windows-only.)
       if (IS_WINDOWS && e.metaKey) {
         return;
       }
 
-      // On Windows the native menu bar is hidden (the window runs with the frame
-      // off and a custom React title bar — see lib.rs set_decorations(false)), so
-      // the menu accelerators that drive these shortcuts on macOS never fire.
-      // Handle them here in the webview instead. Gated to Windows so macOS keeps
-      // its menu accelerators and never runs both (which would fire twice); on
-      // Windows the Rust side drops these accelerators too (see menu.rs `accel`).
-      // `code` is used so it matches regardless of keyboard layout.
-      if (IS_WINDOWS && e.ctrlKey && !e.altKey) {
-        // Ctrl+W closes the active tab/pane; Shift+Ctrl+W closes the window.
+      // Neither platform's native menu carries these shortcuts anymore: Windows
+      // never had a native menu bar (the frame is hidden in favor of the custom
+      // React title bar), and the macOS menu is now reduced to the system
+      // minimum (App + Edit only — see menu.rs). The webview keydown handler is
+      // the single source of truth for them on both platforms, gated on each
+      // platform's primary modifier (Ctrl on Windows, Cmd elsewhere) so the two
+      // gates never overlap. `code` is used so it matches regardless of keyboard
+      // layout.
+      const primaryMod = IS_WINDOWS ? e.ctrlKey : e.metaKey;
+      if (primaryMod && !e.altKey) {
+        // W closes the active tab/pane; Shift+W closes the window.
         if (e.code === "KeyW") {
           e.preventDefault();
           if (e.shiftKey) {
@@ -377,22 +411,23 @@ function App() {
           }
           return;
         }
-        // Ctrl+` cycles focus through the active tab's panes.
+        // ` cycles focus through the active tab's panes.
         if (e.code === "Backquote" && !e.shiftKey) {
           e.preventDefault();
           useTabsStore.getState().focusNextPane();
           return;
         }
-        // Ctrl+N opens a new window (mirrors File > New Window).
+        // N opens a new window (mirrors File > New Window).
         if (e.code === "KeyN" && !e.shiftKey) {
           e.preventDefault();
           void invoke("open_new_window").catch(() => {});
           return;
         }
-        // Ctrl+L focuses the active preview's address bar. Only acts on a preview
-        // pane, so a focused terminal keeps Ctrl+L (clear screen).
+        // L focuses the active preview's address bar. Only acts on a preview
+        // pane, so a focused terminal keeps the primary-modifier+L shortcut
+        // (clear screen).
         if (e.code === "KeyL" && !e.shiftKey) {
-          const controls = activePreviewControls();
+          const controls = focusedPreviewControls();
           if (controls) {
             e.preventDefault();
             controls.focusAddressBar();
@@ -412,11 +447,6 @@ function App() {
         }
         return;
       }
-
-      // ⌘` (cycle panes) is intentionally NOT handled here — it is driven by the
-      // "Cycle Pane" menu accelerator (see the listener below), which fires even
-      // when a native preview webview holds focus and would swallow the keydown.
-      // Handling it here too would advance the pane twice per press.
 
       // Zoom the whole UI. `code` is used so it works regardless of layout/Shift:
       // the "=" key (⌘= or ⌘+) zooms in, "-" zooms out, "0" resets to 100%.
@@ -443,7 +473,7 @@ function App() {
       // preview webview holds focus, an injected script handles them instead —
       // this covers the case where the app webview has focus.)
       if ((e.code === "BracketLeft" || e.code === "BracketRight") && !e.altKey && !e.shiftKey) {
-        const controls = activePreviewControls();
+        const controls = focusedPreviewControls();
         if (controls) {
           e.preventDefault();
           if (e.code === "BracketLeft") {
@@ -474,7 +504,7 @@ function App() {
         useUiStore.getState().toggleSidebar();
       } else if (key === ",") {
         e.preventDefault();
-        useUiStore.getState().setSettingsOpen(true);
+        useUiStore.getState().openSettings();
       } else if (key === "d") {
         // ⌘D splits left/right, ⌘⇧D splits top/bottom (no-op off a terminal tab).
         e.preventDefault();
@@ -485,26 +515,19 @@ function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [closeActiveTabOrPane]);
 
-  // ⌘W closes the active tab/pane. It is driven solely by the "Close Tab" menu
-  // accelerator, NOT a keydown branch: the native menu fires even when a preview
-  // webview holds focus, and having both a keydown handler and the menu
-  // accelerator respond to one ⌘W press would close two tabs at once. The
-  // backend emits scoped to this window's label, so a ⌘W in one window never
-  // closes a tab in another.
+  // Closes the active tab/pane when "Close Tab" is clicked in the self-drawn
+  // WindowMenuBar (menuBarMenus.ts) — a click, not a keydown, so this never
+  // double-fires with the primary-modifier+W keydown handler above.
+  // `emitWindowMenuEvent` scopes the emit to this window's label, so clicking
+  // Close Tab in one window never closes a tab in another.
   useEffect(
     () => listenWebview("menu:close-tab", () => closeActiveTabOrPane()),
     [closeActiveTabOrPane],
   );
 
-  // ⌘L focuses the active preview pane's address bar. Driven by a menu
-  // accelerator so it works even while the native preview webview holds focus.
-  useEffect(
-    () => listenWebview("menu:preview-open-location", () => activePreviewControls()?.focusAddressBar()),
-    [],
-  );
-
-  // ⌘` cycles focus through the active tab's panes. Menu-accelerator driven for
-  // the same reason as ⌘W / ⌘L above.
+  // Cycles focus through the active tab's panes when "Cycle Pane" is clicked in
+  // the WindowMenuBar's Terminal menu — the keyboard path (primary-modifier+`)
+  // is handled directly in the keydown handler above.
   useEffect(
     () => listenWebview("menu:focus-next-pane", () => useTabsStore.getState().focusNextPane()),
     [],
@@ -515,6 +538,92 @@ function App() {
     () => listenWebview("menu:rerun-setup", () => setSetupWizardOpen(true)),
     [setSetupWizardOpen],
   );
+
+  // The rest of menuBarMenus.ts's `menu:*` events, each delegating straight to
+  // an existing store action / bus so the menu bar, its keyboard accelerators,
+  // and the Windows custom title-bar menu all drive the exact same behavior.
+  useEffect(() => {
+    const unlistens = [
+      listenWebview("menu:new-tab", () => {
+        useTabsStore.getState().openLauncherTab();
+      }),
+      listenWebview("menu:new-terminal-tab", () => {
+        useTabsStore.getState().newTerminalTab(useWorkspaceStore.getState().rootPath ?? undefined);
+      }),
+      listenWebview("menu:save", () => {
+        saveFocusedEditor();
+      }),
+      listenWebview("menu:open-settings", (event) => {
+        useUiStore.getState().openSettings(typeof event.payload === "string" ? event.payload : undefined);
+      }),
+      listenWebview("menu:copy", () => {
+        void menuCopy().catch(() => {});
+      }),
+      listenWebview("menu:paste", () => {
+        void menuPaste().catch(() => {});
+      }),
+      listenWebview("menu:select-all", () => {
+        menuSelectAll();
+      }),
+      listenWebview("menu:find-in-terminal", () => {
+        focusedTerminalOps()?.openSearch();
+      }),
+      listenWebview("menu:find-files", () => {
+        useUiStore.getState().openFileFinder();
+      }),
+      listenWebview("menu:toggle-sidebar", () => {
+        useUiStore.getState().toggleSidebar();
+      }),
+      listenWebview("menu:sidebar-panel", (event) => {
+        const view = event.payload as SidebarView;
+        if (useUiStore.getState().sidebarOrder.includes(view)) {
+          useUiStore.getState().selectSidebar(view);
+        }
+      }),
+      listenWebview("menu:preview-back", () => {
+        activePreviewControls()?.back();
+      }),
+      listenWebview("menu:preview-forward", () => {
+        activePreviewControls()?.forward();
+      }),
+      // Forwarded from the native preview webview itself when it holds OS
+      // keyboard focus (see preview.rs's KEY_FORWARD_SCRIPT) — the event
+      // firing at all already proves a preview pane triggered it, so unlike
+      // the in-app Cmd+L keydown handler there's no other pane kind this key
+      // could mean instead. Use the widened activePreviewControls the same
+      // way menu:preview-back does: the store's activeLeafId can lag behind
+      // which pane actually holds native focus.
+      listenWebview("menu:preview-open-location", () => {
+        activePreviewControls()?.focusAddressBar();
+      }),
+      listenWebview("menu:zoom-in", () => {
+        useSettingsStore.getState().zoomIn();
+      }),
+      listenWebview("menu:zoom-out", () => {
+        useSettingsStore.getState().zoomOut();
+      }),
+      listenWebview("menu:zoom-reset", () => {
+        useSettingsStore.getState().resetZoom();
+      }),
+      listenWebview("menu:split-right", () => {
+        useTabsStore.getState().splitActivePane("row");
+      }),
+      listenWebview("menu:split-down", () => {
+        useTabsStore.getState().splitActivePane("col");
+      }),
+      listenWebview("menu:clear-buffer", () => {
+        focusedTerminalOps()?.clear();
+      }),
+      // "Check for Updates" also opens Settings on the About section, where
+      // the update status/progress lives — the same destination as the Help
+      // menu's About item, just with a check kicked off immediately.
+      listenWebview("menu:check-updates", () => {
+        useUiStore.getState().openSettings("about");
+        void useUpdaterStore.getState().checkManually();
+      }),
+    ];
+    return () => unlistens.forEach((off) => off());
+  }, []);
 
   // Auto-open the setup wizard on the very first launch. Gated to the main
   // window: secondary windows use isolated in-memory storage, so their
