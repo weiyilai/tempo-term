@@ -1,8 +1,17 @@
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { listen } from "@tauri-apps/api/event";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
-import { ClipboardPaste, Copy, Loader2, WifiOff } from "lucide-react";
+import {
+  ClipboardPaste,
+  Copy,
+  Eraser,
+  Loader2,
+  Search,
+  TextSelect,
+  WifiOff,
+  type LucideProps,
+} from "lucide-react";
 import { consumeFreshSshLeaf } from "@/modules/ssh/lib/freshSshLeaves";
 import { createTerminal, type TerminalHandle } from "./lib/createTerminal";
 import { createOutputWriter } from "./lib/outputWriter";
@@ -60,6 +69,7 @@ import { actionsFor, findActionLinks, type TerminalAction } from "./lib/actionLi
 import { ActionCard } from "./ActionCard";
 import { buildCellPositions, gatherLogicalLine } from "./lib/cellPositions";
 import { terminalKeySequence, isAppShortcut } from "./lib/terminalKeymap";
+import { terminalMenuSpecs, type TerminalMenuAction } from "./lib/terminalMenuItems";
 import { shouldCdToRoot } from "./lib/cwdSync";
 import { parseOsc7Cwd, parseOsc7RemotePath } from "./lib/osc7";
 import { remoteCwdStore } from "@/modules/ssh/lib/remoteCwdStore";
@@ -214,6 +224,9 @@ export function TerminalView({
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; hasSelection: boolean } | null>(null);
   // Lets the right-click menu call the in-effect smart-paste handler.
   const pasteRef = useRef<((kind: "ctrl" | "cmd") => void) | null>(null);
+  // Lets the right-click menu call the in-effect openSearchBox, which also
+  // refocuses and selects the input when the bar is already open.
+  const openSearchRef = useRef<(() => void) | null>(null);
   // The hover action card (IP / host:port / archive quick commands), positioned
   // at the cursor. A short hide delay lets the pointer travel from the link into
   // the card without it vanishing.
@@ -418,9 +431,20 @@ export function TerminalView({
             : null;
         }
       }
+      // On Linux the Rust clipboard backend is a stub: terminal_clipboard_text
+      // resolves Ok("") and the path/image probes return nothing (see
+      // src-tauri/src/modules/clipboard.rs), which would make a menu paste a
+      // silent no-op there. When every native probe came back empty, read the
+      // web clipboard instead. File paths win before this fallback is
+      // consulted, so the Windows files-copied flow is unchanged, and
+      // macOS/Windows return real text through the fast path above.
+      const effectiveClipboardText =
+        !clipboardText && filePaths.length === 0 && imagePaths.length === 0
+          ? await navigator.clipboard.readText().catch(() => "")
+          : clipboardText;
       const action = resolvePasteAction({
         shortcut: kind,
-        clipboardText,
+        clipboardText: effectiveClipboardText,
         filePaths,
         imagePaths,
         foregroundCommand: command,
@@ -444,6 +468,9 @@ export function TerminalView({
       }
     }
     pasteRef.current = handleTerminalPaste;
+    // openSearchBox is declared further down in this effect; function
+    // declarations hoist, so wiring the ref here keeps it beside pasteRef.
+    openSearchRef.current = openSearchBox;
 
     function isTerminalPasteShortcut(event: KeyboardEvent): "ctrl" | "cmd" | null {
       const isV = event.code === "KeyV" || event.key.toLowerCase() === "v";
@@ -1480,18 +1507,34 @@ export function TerminalView({
         void handlePathDrop(paths, files);
       }}
       onContextMenu={(event) => {
-        // Windows only: replace the WebView2 native menu (whose paste is slow,
-        // ~5s) with our own, backed by the same fast clipboard path as Ctrl+V.
-        // macOS and Linux keep their native menus — neither has the slow-paste
-        // problem, so there's no reason to override their richer native menu.
-        if (!IS_WINDOWS) {
+        // All platforms get the app menu (unified in the cross-platform
+        // context-menu work; Windows started it in #184 because WebView2's
+        // native paste is ~5s). Backed by the same fast clipboard path as
+        // the paste keybinding.
+        const target = event.target;
+        // Only the terminal surface itself (anything inside the .xterm mount,
+        // or the pane's own background) gets the terminal menu — its Paste
+        // writes the clipboard into the pty. Overlay chrome floating above the
+        // mount (the search bar and its buttons, the action card, future
+        // widgets) falls through without preventDefault to the window-level
+        // InputContextMenu, which shows the right menu per element.
+        if (
+          !(target instanceof Element) ||
+          (!target.closest(".xterm") && target !== event.currentTarget)
+        ) {
+          return;
+        }
+        // Terminal not mounted yet: show no menu (spec: error handling) and
+        // fall back to the app-wide blanket suppression.
+        const handle = handleRef.current;
+        if (!handle) {
           return;
         }
         event.preventDefault();
         setContextMenu({
           x: event.clientX,
           y: event.clientY,
-          hasSelection: handleRef.current?.term.hasSelection() ?? false,
+          hasSelection: handle.term.hasSelection(),
         });
       }}
     >
@@ -1501,34 +1544,49 @@ export function TerminalView({
           x={contextMenu.x}
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
-          items={[
-            ...(contextMenu.hasSelection
-              ? [
-                  {
-                    id: "copy",
-                    label: t("terminalCopy"),
-                    icon: Copy,
-                    onSelect: () => {
-                      const term = handleRef.current?.term;
-                      if (term?.hasSelection()) {
-                        void navigator.clipboard.writeText(term.getSelection());
-                      }
-                    },
-                  } satisfies ContextMenuItem,
-                ]
-              : []),
-            {
-              id: "paste",
-              label: t("terminalPaste"),
-              icon: ClipboardPaste,
+          items={terminalMenuSpecs({ hasSelection: contextMenu.hasSelection }).map((spec) => {
+            const icons = {
+              copy: Copy,
+              paste: ClipboardPaste,
+              selectAll: TextSelect,
+              clear: Eraser,
+              search: Search,
+            } satisfies Record<TerminalMenuAction, ComponentType<LucideProps>>;
+            // Literal t() calls per key — a dynamic t(labels[action]) can fail
+            // typecheck if the project ever adopts typed i18next keys.
+            const labels: Record<TerminalMenuAction, string> = {
+              copy: t("terminalCopy"),
+              paste: t("terminalPaste"),
+              selectAll: t("terminalSelectAll"),
+              clear: t("terminalClear"),
+              search: t("terminalSearch.label"),
+            };
+            const actions: Record<TerminalMenuAction, () => void> = {
+              copy: () => {
+                const term = handleRef.current?.term;
+                if (term?.hasSelection()) {
+                  void navigator.clipboard.writeText(term.getSelection());
+                }
+              },
               // "cmd" so an empty clipboard is a no-op; "ctrl" would inject the
               // raw paste control byte, which a menu paste should never do.
-              onSelect: () => {
+              paste: () => {
                 pasteRef.current?.("cmd");
                 handleRef.current?.term.focus();
               },
-            } satisfies ContextMenuItem,
-          ]}
+              selectAll: () => handleRef.current?.term.selectAll(),
+              clear: () => handleRef.current?.term.clear(),
+              search: () => openSearchRef.current?.(),
+            };
+            return {
+              id: spec.action,
+              label: labels[spec.action],
+              icon: icons[spec.action],
+              disabled: !spec.enabled,
+              group: spec.group,
+              onSelect: actions[spec.action],
+            } satisfies ContextMenuItem;
+          })}
         />
       )}
       {actionCard && (

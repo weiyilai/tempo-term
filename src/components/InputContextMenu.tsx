@@ -1,18 +1,19 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, ClipboardPaste, Scissors, TextSelect } from "lucide-react";
 import type { LucideProps } from "lucide-react";
 import type { ComponentType } from "react";
 import { ContextMenu, type ContextMenuItem } from "@/components/ContextMenu";
-import { IS_WINDOWS } from "@/lib/platform";
 import { terminalClipboardText } from "@/modules/terminal/lib/terminalClipboard";
 import {
   isPlainTextField,
   isRichEditable,
+  isEditorSurface,
   readFieldContext,
   inputMenuSpecs,
   replaceRange,
   getSelectionRange,
+  isDevBuild,
   type EditableField,
   type FieldContext,
   type InputMenuAction,
@@ -36,10 +37,11 @@ const ICONS: Record<InputMenuAction, ComponentType<LucideProps>> = {
 };
 
 /**
- * Windows-only replacement for the WebView2 context menu on plain text fields
+ * App-styled replacement for the browser context menu on plain text fields
  * (`<input>` / `<textarea>`), and a blanket suppressor of the browser menu
- * everywhere else. Mounted once near the app root. Non-Windows platforms keep
- * their richer native menus, so the effect never installs there.
+ * everywhere else (skipped in dev builds so Inspect Element stays reachable).
+ * Mounted once near the app root and active on every platform; it started as
+ * a Windows-only fix because WebView2's native paste takes ~5s.
  *
  * Actions restore the field's focus and act on the selection captured at
  * right-click time. Cut/paste edit through `replaceRange`, which dispatches an
@@ -49,18 +51,33 @@ const ICONS: Record<InputMenuAction, ComponentType<LucideProps>> = {
 export function InputContextMenu() {
   const { t } = useTranslation();
   const [menu, setMenu] = useState<MenuState | null>(null);
+  // The element with an active IME composition, if any. Tracked so a
+  // right-click during composition keeps the native menu (which commits the
+  // composition correctly) instead of ours — replaceRange rewriting the value
+  // mid-composition would corrupt the composed text.
+  const composingRef = useRef<EventTarget | null>(null);
 
   useEffect(() => {
-    if (!IS_WINDOWS) {
-      return;
+    function onCompositionStart(e: CompositionEvent) {
+      composingRef.current = e.target;
+    }
+    function onCompositionEnd(e: CompositionEvent) {
+      if (composingRef.current === e.target) {
+        composingRef.current = null;
+      }
     }
     function onContextMenu(e: MouseEvent) {
       // A component already showed its own menu (tab bar, file tree, git graph,
-      // Monaco, the terminal's Windows menu, …) — leave it be.
+      // Monaco, the terminal's menu, …) — leave it be.
       if (e.defaultPrevented) {
         return;
       }
       const target = e.target;
+      // Mid-IME-composition: keep the native menu (no preventDefault), matching
+      // the pre-unification behavior. See composingRef above.
+      if (composingRef.current !== null && target === composingRef.current) {
+        return;
+      }
       if (isPlainTextField(target)) {
         e.preventDefault();
         const { start, end } = getSelectionRange(target);
@@ -74,16 +91,30 @@ export function InputContextMenu() {
         });
         return;
       }
-      // contentEditable (Tiptap notes): keep the native menu — its spellcheck and
-      // copy/paste beat a custom one, and driving it would fight the editor.
-      if (isRichEditable(target)) {
+      // contentEditable (Tiptap notes) and editor surfaces (CodeMirror diff
+      // view, Monaco): keep the native menu — its spellcheck and copy/paste
+      // beat a custom one, and driving it would fight the editor. The surface
+      // check catches read-only CodeMirror, whose content is not contentEditable.
+      if (isRichEditable(target) || isEditorSurface(target)) {
         return;
       }
       // Everywhere else: kill the browser menu (Reload / Save as / Inspect …).
+      // Dev builds keep it so right-click → Inspect Element still works.
+      if (isDevBuild()) {
+        return;
+      }
       e.preventDefault();
     }
+    // Capture phase so composition state is tracked even if an editor stops
+    // propagation of these events in the bubble phase.
+    window.addEventListener("compositionstart", onCompositionStart, true);
+    window.addEventListener("compositionend", onCompositionEnd, true);
     window.addEventListener("contextmenu", onContextMenu);
-    return () => window.removeEventListener("contextmenu", onContextMenu);
+    return () => {
+      window.removeEventListener("compositionstart", onCompositionStart, true);
+      window.removeEventListener("compositionend", onCompositionEnd, true);
+      window.removeEventListener("contextmenu", onContextMenu);
+    };
   }, []);
 
   const runAction = useCallback(
@@ -124,6 +155,12 @@ export function InputContextMenu() {
             } catch {
               text = "";
             }
+          }
+          // On Linux the Rust command is a stub that RESOLVES with "" (no
+          // native clipboard backend there), so the catch above never runs.
+          // Retry the web clipboard whenever the fast path came back empty.
+          if (!text) {
+            text = await navigator.clipboard.readText().catch(() => "");
           }
           if (text) {
             field.focus();

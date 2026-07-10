@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   isPlainTextField,
   isRichEditable,
+  isEditorSurface,
   readFieldContext,
   inputMenuSpecs,
   replaceRange,
@@ -66,6 +67,47 @@ describe("isRichEditable", () => {
     expect(isRichEditable(editable)).toBe(true);
     expect(isRichEditable(document.createElement("input"))).toBe(false);
     expect(isRichEditable(null)).toBe(false);
+  });
+});
+
+describe("isEditorSurface", () => {
+  it("is true inside a read-only CodeMirror editor (contenteditable false)", () => {
+    // The diff view sets EditorView.editable.of(false), which renders
+    // cm-content with contenteditable="false" — isRichEditable misses it.
+    const editor = document.createElement("div");
+    editor.className = "cm-editor";
+    const content = document.createElement("div");
+    content.setAttribute("contenteditable", "false");
+    editor.appendChild(content);
+    expect(isEditorSurface(content)).toBe(true);
+  });
+
+  it("is true inside Monaco and ProseMirror surfaces", () => {
+    for (const cls of ["monaco-editor", "ProseMirror"]) {
+      const host = document.createElement("div");
+      host.className = cls;
+      const child = document.createElement("span");
+      host.appendChild(child);
+      expect(isEditorSurface(child)).toBe(true);
+    }
+  });
+
+  it("is false for plain fields, blank elements, and non-elements", () => {
+    const input = document.createElement("input");
+    input.type = "text";
+    expect(isEditorSurface(input)).toBe(false);
+    expect(isEditorSurface(document.createElement("div"))).toBe(false);
+    expect(isEditorSurface(null)).toBe(false);
+  });
+
+  it("is true for SVG decorations inside an editor (fold arrows, lint markers)", () => {
+    // SVG elements are Element but not HTMLElement; the check must not lose
+    // them or the editor's native menu dies on icon right-clicks in prod.
+    const editor = document.createElement("div");
+    editor.className = "cm-editor";
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    editor.appendChild(icon);
+    expect(isEditorSurface(icon)).toBe(true);
   });
 });
 
