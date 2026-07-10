@@ -152,8 +152,8 @@ export function TerminalView({
   const containerRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<TerminalHandle | null>(null);
   const sessionRef = useRef<PtySession | SshSession | null>(null);
-  // The backend pty id of this pane's local session, if any. Windows matches
-  // `session-status` IPC events (see status_ipc) back to the pane by this id.
+  // The backend pty id of this pane's local session, if any. `session-status`
+  // IPC events (see status_ipc) are matched back to the pane by this id.
   const ptyIdRef = useRef<number | null>(null);
   // The debounced PTY-resize pusher created in the mount effect (see its
   // comment for why it's debounced), exposed here so other effects that
@@ -312,9 +312,11 @@ export function TerminalView({
       onDrop: (total) => noteDroppedOutput(total),
     });
 
-    // The session-status hook (see claude_status_hook) emits OSC 6973 on this
-    // pane's tty when Claude changes state. Capture it here, where we know the
-    // leaf id, and feed the per-leaf status store that drives the card badge.
+    // OSC 6973 session status. Local panes report over the loopback IPC
+    // listener below; this in-band handler is the delivery path for SSH
+    // remote panes whose remote setup writes the status OSC on the pty
+    // stream. Capture it here, where we know the leaf id, and feed the
+    // per-leaf status store that drives the card badge.
     const statusOscHandler = term.parser.registerOscHandler(STATUS_OSC_CODE, (payload) => {
       const leaf = leafIdRef.current;
       if (leaf) {
@@ -328,39 +330,38 @@ export function TerminalView({
       return true; // consume so the sequence never reaches the screen
     });
 
-    // Windows delivers session status over a loopback socket instead of the
-    // OSC/tty path above, which has no Windows backend (#155). The Rust listener
-    // (see status_ipc) emits `session-status` tagged with the reporting pane's
-    // pty id; match it to this pane and feed the same store. Reconstruct the OSC
-    // payload so `parseStatusOsc` stays the single source of truth for the
-    // notify→status mapping and validation.
+    // Local panes deliver session status over a loopback socket on every
+    // platform (#155, #181). The Rust listener (see status_ipc) emits
+    // `session-status` tagged with the reporting pane's pty id; match it to
+    // this pane and feed the same store. Reconstruct the OSC payload so
+    // `parseStatusOsc` stays the single source of truth for the notify→status
+    // mapping and validation. The OSC handler above remains the delivery path
+    // for SSH remote panes, which report in-band over the pty stream.
     let statusEventUnlisten: (() => void) | undefined;
     let statusEventDisposed = false;
-    if (IS_WINDOWS) {
-      void listen<{ paneId: number; kind: string; payload: string }>(
-        "session-status",
-        (event) => {
-          if (event.payload.paneId !== ptyIdRef.current) return;
-          const leaf = leafIdRef.current;
-          if (!leaf) return;
-          const parsed = parseStatusOsc(
-            `tempoterm;${event.payload.kind};${event.payload.payload}`,
-          );
-          if (parsed?.kind === "status") {
-            useSessionStatusStore.getState().setStatus(leaf, parsed.status);
-          } else if (parsed?.kind === "end") {
-            useSessionStatusStore.getState().clear(leaf);
-          }
-        },
-      )
-        .then((un) => {
-          // Race-safe under StrictMode: if the effect already cleaned up before
-          // listen() resolved, unsubscribe immediately.
-          if (statusEventDisposed) un();
-          else statusEventUnlisten = un;
-        })
-        .catch(() => {});
-    }
+    void listen<{ paneId: number; kind: string; payload: string }>(
+      "session-status",
+      (event) => {
+        if (event.payload.paneId !== ptyIdRef.current) return;
+        const leaf = leafIdRef.current;
+        if (!leaf) return;
+        const parsed = parseStatusOsc(
+          `tempoterm;${event.payload.kind};${event.payload.payload}`,
+        );
+        if (parsed?.kind === "status") {
+          useSessionStatusStore.getState().setStatus(leaf, parsed.status);
+        } else if (parsed?.kind === "end") {
+          useSessionStatusStore.getState().clear(leaf);
+        }
+      },
+    )
+      .then((un) => {
+        // Race-safe under StrictMode: if the effect already cleaned up before
+        // listen() resolved, unsubscribe immediately.
+        if (statusEventDisposed) un();
+        else statusEventUnlisten = un;
+      })
+      .catch(() => {});
 
     // OSC 7 cwd reports. Two emitters use this pane-lifetime handler: the
     // Windows local shell integration (see lib/osc7.ts), and — on every
@@ -882,7 +883,7 @@ export function TerminalView({
           return;
         }
         sessionRef.current = session;
-        // Record the pty id so Windows status-IPC events can be matched to this
+        // Record the pty id so session-status IPC events can be matched to this
         // pane (see the session-status listener); SSH panes have no pty id.
         ptyIdRef.current = isPtySession(session) ? session.id : null;
         // Register live SSH session so ConnectionsPanel can show forwarding status.

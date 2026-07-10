@@ -12,8 +12,12 @@ use modules::claude_progress::{
     claude_progress_unwatch, claude_progress_watch, claude_session_title, ClaudeProgressState,
 };
 use modules::codex_progress::{codex_session_title, CodexProgressState};
-use modules::claude_status_hook::{claude_status_hook_install, claude_status_hook_uninstall};
-use modules::codex_status_hook::{codex_status_hook_install, codex_status_hook_uninstall};
+use modules::claude_status_hook::{
+    claude_status_hook_cleanup_legacy, claude_status_hook_install, claude_status_hook_uninstall,
+};
+use modules::codex_status_hook::{
+    codex_status_hook_cleanup_legacy, codex_status_hook_install, codex_status_hook_uninstall,
+};
 use modules::notes::{notes_unwatch, notes_watch, NotesWatchState};
 use modules::clipboard::{
     terminal_clipboard_image_paths, terminal_clipboard_paths, terminal_clipboard_text,
@@ -88,10 +92,11 @@ fn open_new_window(app: tauri::AppHandle) -> tauri::Result<()> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Native status-hook shim: `tempo-term --status-hook <state>`. On Windows the
-    // CLI's settings.json registers this instead of a bare `.sh` (which cmd can't
-    // run — issue #155). Handle it before Tauri starts and exit; it's a no-op
-    // outside a tempo-term pane (guards on the TEMPOTERM_* env we inject there).
+    // Native status-hook shim: `tempo-term --status-hook <state>`. Every
+    // platform's Claude/Codex hook config registers this command (see
+    // claude_status_hook); handle it before Tauri starts and exit. It's a
+    // no-op outside a tempo-term pane (guards on the TEMPOTERM_* env we
+    // inject there).
     let mut args = std::env::args().skip(1);
     if args.next().as_deref() == Some("--status-hook") {
         let state = args.next().unwrap_or_default();
@@ -162,36 +167,29 @@ pub fn run() {
                     modules::pty::shell::init_autosuggest_zdotdir(&dir, &plugin);
                 }
             }
-            // Windows delivers Claude/Codex session status over a loopback
-            // socket instead of the Unix OSC/tty path (#155): bind the listener
-            // now, before any pane spawns, and stash its address+token so each
-            // pane's env can point its status-hook shim back here. A bind failure
-            // just leaves status tracking off — never blocks startup.
-            #[cfg(windows)]
-            {
-                match modules::status_ipc::start(app.handle()) {
-                    Ok(ipc) => {
-                        app.manage(ipc);
-                    }
-                    Err(err) => eprintln!("status-ipc listener disabled: {err}"),
+            // Claude/Codex session status arrives over a loopback socket (#155,
+            // ported to all platforms in #181): bind the listener now, before
+            // any pane spawns, and stash its address+token so each pane's env
+            // can point its status-hook shim back here. A bind failure just
+            // leaves status tracking off — never blocks startup.
+            match modules::status_ipc::start(app.handle()) {
+                Ok(ipc) => {
+                    app.manage(ipc);
                 }
+                Err(err) => eprintln!("status-ipc listener disabled: {err}"),
             }
             modules::menu::init(app)?;
-            // Windows: the status hooks' install command is cleanup-only (#155,
-            // since a bare `.sh` hook command pops the "Open With" dialog on
-            // every event there). But the only launch-time caller of install is
-            // gated on the user's `claudeStatusTracking` setting (see App.tsx) —
-            // a user who flipped that off to work around the dialog storm would
-            // otherwise never get cleaned up. Run cleanup here instead,
-            // independent of any frontend setting, on every launch. Both
-            // uninstall fns are already best-effort and idempotent (a no-op
-            // rewrite is skipped internally — see PR #176 review Fix 3), so a
-            // direct cfg-gated call needs no extra wrapper.
-            #[cfg(target_os = "windows")]
+            // Migrate old installs off the pre-#181 `.sh` status hooks: strip
+            // their config entries and delete the script, on every platform,
+            // independent of the `claudeStatusTracking` setting — the only
+            // launch-time caller of install is gated on that setting (see
+            // App.tsx), so a user who disabled tracking would otherwise never
+            // get migrated. Legacy-only and skip-write-when-clean, so a
+            // migrated machine's launch touches no config file.
             {
                 let handle = app.handle().clone();
-                let _ = claude_status_hook_uninstall(handle.clone());
-                let _ = codex_status_hook_uninstall(handle);
+                let _ = claude_status_hook_cleanup_legacy(handle.clone());
+                let _ = codex_status_hook_cleanup_legacy(handle);
             }
             Ok(())
         })
