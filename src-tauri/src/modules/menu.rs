@@ -87,6 +87,10 @@ fn build_app_submenu(handle: &tauri::AppHandle) -> tauri::Result<tauri::menu::Su
 /// via `set_native_menu`; once it does, `rebuild_menu` replaces the Edit menu
 /// with the frontend's menus (App submenu is always prepended, see
 /// `build_app_submenu`).
+// `app` is only read inside the macOS-only block below; off macOS this is a
+// no-op that returns Ok, so silence the unused-parameter warning there (mirrors
+// the `dead_code` cfg_attr guards on the model types above).
+#[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
 pub fn init(app: &mut App) -> tauri::Result<()> {
     // Windows renders the in-window menu bar; no native menu at all.
     #[cfg(target_os = "macos")]
