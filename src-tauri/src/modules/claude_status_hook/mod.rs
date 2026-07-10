@@ -10,7 +10,9 @@ use tauri::{AppHandle, Manager};
 
 use crate::modules::claude_progress::config_base_dir;
 
-/// The hook script body, embedded so install can write it to disk.
+/// The hook script body, embedded so install can write it to disk. Unused on
+/// Windows, where install is cleanup-only and never writes the script (#155).
+#[cfg_attr(windows, allow(dead_code))]
 pub const HOOK_SCRIPT: &str = include_str!("status-hook.sh");
 
 /// (Claude Code hook event, status argument) pairs we install. The argument is
@@ -31,6 +33,7 @@ const EVENTS: &[(&str, &str)] = &[
     ("SessionEnd", "end"),
 ];
 
+#[cfg_attr(windows, allow(dead_code))]
 fn our_command(script_path: &str, state: &str) -> String {
     format!("{script_path} {state}")
 }
@@ -43,12 +46,16 @@ fn our_command(script_path: &str, state: &str) -> String {
 /// forward-slash form. Applied unconditionally: Unix paths never contain a
 /// backslash, so this is effectively a no-op there, and keeping it
 /// platform-agnostic lets the dedup logic be tested on any CI runner.
-fn normalize(s: &str) -> String {
+/// `pub(crate)`: `codex_status_hook` mirrors this same normalize-before-match
+/// step for its own hooks.json cleanup (see #155 follow-up).
+pub(crate) fn normalize(s: &str) -> String {
     s.replace('\\', "/")
 }
 
 /// Add our hook entry to each event without disturbing the user's own hooks.
-/// Idempotent: re-running never duplicates our entries.
+/// Idempotent: re-running never duplicates our entries. Unused on Windows, where
+/// install is cleanup-only and never merges our entries in (#155).
+#[cfg_attr(windows, allow(dead_code))]
 pub fn merge_hook_settings(mut existing: Value, script_path: &str, events: &[(&str, &str)]) -> Value {
     if !existing.is_object() {
         existing = json!({});
@@ -158,48 +165,77 @@ fn write_settings(settings_path: &PathBuf, value: &Value) -> Result<(), String> 
 }
 
 /// Write the hook script and register its entries in settings.json. Idempotent.
+///
+/// On Windows this is a cleanup-only no-op: the status mechanism (walk the
+/// process ancestry to the PTY and write an OSC to `/dev/$tty`) has no Windows
+/// backend, and Claude Code runs `command` hooks through cmd, which cannot
+/// execute a bare forward-slash `.sh` path — it pops the Windows "Open With"
+/// picker on every hook event (#155). Since install runs on every launch when
+/// tracking is enabled, we instead strip any entries an older build wrote so
+/// affected users recover automatically.
 #[tauri::command]
 pub fn claude_status_hook_install(app: AppHandle) -> Result<(), String> {
-    let (script_path, settings_path) = paths(&app)?;
-    if let Some(dir) = script_path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
-    std::fs::write(&script_path, HOOK_SCRIPT).map_err(|e| e.to_string())?;
-    #[cfg(unix)]
+    #[cfg(windows)]
     {
+        return claude_status_hook_uninstall(app);
+    }
+    #[cfg(not(windows))]
+    {
+        let (script_path, settings_path) = paths(&app)?;
+        if let Some(dir) = script_path.parent() {
+            std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+        }
+        std::fs::write(&script_path, HOOK_SCRIPT).map_err(|e| e.to_string())?;
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&script_path, std::fs::Permissions::from_mode(0o755))
             .map_err(|e| e.to_string())?;
+        let script_str = script_path.to_str().ok_or("script path is not valid UTF-8")?;
+        // Canonicalize to forward slashes so the command has one stable form (see
+        // `normalize`); a no-op on Unix, but keeps install/remove symmetric.
+        let script_str = normalize(script_str);
+        let script_str = script_str.as_str();
+        // Remove our existing entries first, then merge fresh. This migrates installs
+        // from older versions whose command arguments differed (e.g. Notification
+        // used to pass "waiting-approval") or whose path used backslashes; a plain
+        // merge would leave those stale entries behind alongside the new ones.
+        let cleaned = remove_hook_settings(read_settings(&settings_path)?, script_str, EVENTS);
+        let merged = merge_hook_settings(cleaned, script_str, EVENTS);
+        write_settings(&settings_path, &merged)
     }
-    let script_str = script_path.to_str().ok_or("script path is not valid UTF-8")?;
-    // Canonicalize to forward slashes so the command bash runs is valid on Windows
-    // and has one stable form (see `normalize`).
-    let script_str = normalize(script_str);
-    let script_str = script_str.as_str();
-    // Remove our existing entries first, then merge fresh. This migrates installs
-    // from older versions whose command arguments differed (e.g. Notification
-    // used to pass "waiting-approval") or whose path used backslashes; a plain
-    // merge would leave those stale entries behind alongside the new ones.
-    let cleaned = remove_hook_settings(read_settings(&settings_path)?, script_str, EVENTS);
-    let merged = merge_hook_settings(cleaned, script_str, EVENTS);
-    write_settings(&settings_path, &merged)
 }
 
-/// Remove our settings.json entries and delete the hook script.
+/// Remove our entries from the settings file at `settings_path`, skipping the
+/// rewrite entirely when nothing changed. `raw_script_path` need not be
+/// pre-normalized: it is normalized internally (see `normalize`) before
+/// matching, so entries are found regardless of which slash style
+/// `script_path.to_str()` produced (e.g. an old Windows build's backslash
+/// path) — PR #176 review Fix 1. Only rewrites when an entry was actually
+/// removed, so a file with nothing of ours in it (the common case on every
+/// launch) is never touched — no re-sorted keys, no race with Claude Code's
+/// own writes — PR #176 review Fix 3. A missing file is a no-op, so
+/// uninstalling never creates an empty `{}` file for a user with no settings.
+fn cleanup_settings(settings_path: &PathBuf, raw_script_path: &str) -> Result<(), String> {
+    if !settings_path.exists() {
+        return Ok(());
+    }
+    let script_path = normalize(raw_script_path);
+    let existing = read_settings(settings_path)?;
+    let cleaned = remove_hook_settings(existing.clone(), &script_path, EVENTS);
+    if cleaned != existing {
+        write_settings(settings_path, &cleaned)?;
+    }
+    Ok(())
+}
+
+/// Remove our settings.json entries and delete the hook script. Also called
+/// (via `crate::modules::claude_status_hook::claude_status_hook_uninstall`)
+/// from `lib.rs`'s `.setup()` on Windows, independent of the user's
+/// `claudeStatusTracking` setting (see #155 follow-up, Fix 2).
 #[tauri::command]
 pub fn claude_status_hook_uninstall(app: AppHandle) -> Result<(), String> {
     let (script_path, settings_path) = paths(&app)?;
     let script_str = script_path.to_str().ok_or("script path is not valid UTF-8")?;
-    // Match on the same forward-slash form install wrote (see `normalize`), so we
-    // also clean up entries left by older backslash installs.
-    let script_str = normalize(script_str);
-    let script_str = script_str.as_str();
-    // Only rewrite settings.json if it already exists, so uninstalling never
-    // creates an empty `{}` file for a user who has no settings.
-    if settings_path.exists() {
-        let cleaned = remove_hook_settings(read_settings(&settings_path)?, script_str, EVENTS);
-        write_settings(&settings_path, &cleaned)?;
-    }
+    cleanup_settings(&settings_path, script_str)?;
     let _ = std::fs::remove_file(&script_path);
     if let Some(dir) = script_path.parent() {
         let _ = std::fs::remove_dir(dir); // best-effort, only succeeds when empty
@@ -267,6 +303,49 @@ mod tests {
         let other = json!({ "hooks": { "PreToolUse": [{ "hooks": [{ "type": "command", "command": "user" }] }] } });
         let cleaned = remove_hook_settings(other.clone(), "/p/status-hook.sh", EVENTS);
         assert_eq!(cleaned, other);
+    }
+
+    fn temp_dir_for(tag: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("tt-claude-hook-cleanup-{}-{}", tag, std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    // --- cleanup_settings: PR #176 review findings ---------------------------
+
+    #[test]
+    fn cleanup_settings_skips_rewrite_when_nothing_to_remove() {
+        // Fix 3: a settings.json with no tempo-term entries must come out
+        // byte-identical, including key order. serde_json has no preserve_order
+        // feature, so any unconditional rewrite would re-sort these keys
+        // alphabetically even though nothing changed — that's the bug.
+        let dir = temp_dir_for("noop");
+        let settings_path = dir.join("settings.json");
+        let original = "{\n  \"zeta\": 1,\n  \"alpha\": 2\n}\n";
+        std::fs::write(&settings_path, original).unwrap();
+
+        cleanup_settings(&settings_path, "/p/status-hook.sh").unwrap();
+
+        let after = std::fs::read_to_string(&settings_path).unwrap();
+        assert_eq!(after, original, "file with nothing to remove must be left byte-identical");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn cleanup_settings_rewrites_when_an_entry_is_actually_removed() {
+        let dir = temp_dir_for("changed");
+        let settings_path = dir.join("settings.json");
+        let merged = merge_hook_settings(json!({}), "/p/status-hook.sh", EVENTS);
+        std::fs::write(&settings_path, serde_json::to_string_pretty(&merged).unwrap()).unwrap();
+
+        cleanup_settings(&settings_path, "/p/status-hook.sh").unwrap();
+
+        let after: Value = serde_json::from_str(&std::fs::read_to_string(&settings_path).unwrap()).unwrap();
+        assert!(after.get("hooks").is_none());
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
