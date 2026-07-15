@@ -261,14 +261,16 @@ fn read_nvm_node_versions(home: Option<&str>) -> Vec<String> {
 }
 
 /// fnm's data root: `$FNM_DIR` when set, else the per-OS default —
-/// `%LOCALAPPDATA%\fnm` (Windows), `~/Library/Application Support/fnm` (macOS),
-/// or `$XDG_DATA_HOME/fnm` else `~/.local/share/fnm` (other Unix). fnm lets the
-/// root be relocated via `$FNM_DIR`, so the default alone isn't enough. Pure: the
-/// OS is passed in so both default branches are unit-tested on the macOS runner.
+/// `%APPDATA%\fnm` (Windows), `~/Library/Application Support/fnm` (macOS), or
+/// `$XDG_DATA_HOME/fnm` else `~/.local/share/fnm` (other Unix). These mirror
+/// fnm's own `dirs::data_dir()`-based default; a GUI launch never inherits the
+/// shell's `$FNM_DIR`, so the default is what actually resolves there and must be
+/// right (Roaming `%APPDATA%`, not Local `%LOCALAPPDATA%`). Pure: the OS is passed
+/// in so every default branch is unit-tested on the macOS runner.
 fn fnm_root(
     fnm_dir: Option<&str>,
     home: Option<&str>,
-    localappdata: Option<&str>,
+    appdata: Option<&str>,
     xdg_data_home: Option<&str>,
     windows: bool,
     macos: bool,
@@ -277,7 +279,11 @@ fn fnm_root(
         return Some(PathBuf::from(dir));
     }
     if windows {
-        return localappdata.map(|l| PathBuf::from(l).join("fnm"));
+        // APPDATA is normally set, but a stripped GUI/service env can drop it;
+        // fall back to rebuilding the Roaming path from home (USERPROFILE).
+        return appdata
+            .map(|a| PathBuf::from(a).join("fnm"))
+            .or_else(|| home.map(|h| PathBuf::from(h).join("AppData").join("Roaming").join("fnm")));
     }
     // Only the home-based defaults need `home`; a set XDG_DATA_HOME must still
     // resolve when HOME is absent (a stripped GUI launch can hand us neither).
@@ -382,7 +388,7 @@ fn find_tool(stem: &str) -> Option<PathBuf> {
     if let Some(root) = fnm_root(
         fnm_dir.as_deref(),
         home.as_deref(),
-        localappdata.as_deref(),
+        appdata.as_deref(),
         xdg_data_home.as_deref(),
         windows,
         cfg!(target_os = "macos"),
@@ -715,7 +721,7 @@ mod tests {
         let custom = fnm_root(
             Some(r"C:\custom\fnm"),
             Some(r"C:\Users\me"),
-            Some(r"C:\Users\me\AppData\Local"),
+            Some(r"C:\Users\me\AppData\Roaming"),
             None,
             true,
             false,
@@ -725,9 +731,17 @@ mod tests {
 
     #[test]
     fn fnm_root_per_os_defaults() {
-        // Windows: %LOCALAPPDATA%\fnm
-        let win = fnm_root(None, Some(r"C:\Users\me"), Some(r"C:\Local"), None, true, false);
-        assert_eq!(win, Some(PathBuf::from(r"C:\Local").join("fnm")));
+        // Windows: %APPDATA%\fnm (Roaming — fnm's data_dir default, NOT Local).
+        let appdata = r"C:\Users\me\AppData\Roaming";
+        let win = fnm_root(None, Some(r"C:\Users\me"), Some(appdata), None, true, false);
+        assert_eq!(win, Some(PathBuf::from(appdata).join("fnm")));
+        // Windows with APPDATA missing falls back to home\AppData\Roaming\fnm
+        // (a stripped launch may drop APPDATA but keep USERPROFILE).
+        let win_fallback = fnm_root(None, Some(r"C:\Users\me"), None, None, true, false);
+        assert_eq!(
+            win_fallback,
+            Some(PathBuf::from(r"C:\Users\me").join("AppData").join("Roaming").join("fnm"))
+        );
         // macOS: ~/Library/Application Support/fnm
         let mac = fnm_root(None, Some("/Users/me"), None, None, false, true);
         assert_eq!(
