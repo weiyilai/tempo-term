@@ -52,7 +52,8 @@
     "gitGraph": "Git Graph",
     "settings": "Settings",
     "connections": "Connections",
-    "sessions": "AI Sessions"
+    "sessions": "AI Sessions",
+    "ports": "Ports"
   },
   "statusBar": {
     "ready": "Ready",
@@ -117,7 +118,8 @@
     "selectAll": "Select All",
     "findInTerminal": "Find in Terminal",
     "findFiles": "Find Files...",
-    "toggleSidebar": "Toggle Sidebar",
+    "toggleSidebar": "Toggle Left Sidebar",
+    "toggleRightSidebar": "Toggle Right Sidebar",
     "sidebarPanel": "Sidebar Panel",
     "previewBack": "Preview Back",
     "previewForward": "Preview Forward",
@@ -263,7 +265,8 @@
     "noWorkspaceHint": "Open a folder to start working",
     "closeWorkspace": "Close folder",
     "toggleTerminal": "Toggle terminal",
-    "toggleSidebar": "Toggle sidebar",
+    "toggleSidebar": "Toggle left sidebar",
+    "toggleRightSidebar": "Toggle right sidebar",
     "terminal": "Terminal",
     "note": "Note",
     "newTerminal": "New terminal",
